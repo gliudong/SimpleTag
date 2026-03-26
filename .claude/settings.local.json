@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls:*)",
+      "Bash(java:*)",
+      "Bash(echo:*)",
+      "Bash(brew install:*)",
+      "Bash(mkdir -p ~/Downloads/android-tools)",
+      "Read(//Users/liudong320/Downloads/**)",
+      "Bash(curl -L https://dl.google.com/android/repository/commandlinetools-mac-11076708_latest.zip -o commandlinetools-mac.zip)",
+      "Bash(export ANDROID_HOME=$HOME/Library/Android/sdk)",
+      "Bash(export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin)",
+      "Bash(sdkmanager --version)",
+      "Bash(yes)",
+      "Bash(sdkmanager --licenses)",
+      "Bash(sdkmanager \"platform-tools\" \"platforms;android-36\" \"build-tools;36.0.0\")",
+      "Bash(sdkmanager --list_installed)"
+    ]
+  }
+}
