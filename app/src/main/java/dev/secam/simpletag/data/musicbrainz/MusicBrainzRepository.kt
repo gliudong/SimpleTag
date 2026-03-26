@@ -243,7 +243,8 @@ class MusicBrainzRepository(
                                 title = trackObj.optString("title", ""),
                                 number = trackObj.optInt("number", 0),
                                 duration = trackObj.optInt("length", 0).takeIf { it > 0 },
-                                artist = trackObj.optString("artist-credit", null)
+                                artist = parseTrackArtist(trackObj.optJSONArray("artist-credit")),
+                                artistId = parseTrackArtistId(trackObj.optJSONArray("artist-credit"))
                             )
                         )
                     }
@@ -276,6 +277,20 @@ class MusicBrainzRepository(
             releaseType = releaseType,
             releaseGroupId = releaseGroupId
         )
+    }
+
+    private fun parseTrackArtist(artistCredit: JSONArray?): String? {
+        if (artistCredit == null || artistCredit.length() == 0) return null
+        val firstCredit = artistCredit.optJSONObject(0)
+        val artistObj = firstCredit?.optJSONObject("artist") ?: return null
+        return artistObj.optString("name", null).ifBlank { null }
+    }
+
+    private fun parseTrackArtistId(artistCredit: JSONArray?): String? {
+        if (artistCredit == null || artistCredit.length() == 0) return null
+        val firstCredit = artistCredit.optJSONObject(0)
+        val artistObj = firstCredit?.optJSONObject("artist") ?: return null
+        return artistObj.optString("id", null).ifBlank { null }
     }
 
     fun clearCache() {

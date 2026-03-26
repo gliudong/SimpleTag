@@ -697,26 +697,31 @@ class EditorViewModel @Inject constructor(
         val fieldMap = MusicBrainzMapper.mapToFieldStates(release)
 
         _uiState.update { currentState ->
-            var newState = currentState
+            val updatedFieldStates = currentState.fieldStates.toMutableMap()
+            var updatedInvisibleTags = currentState.invisibleTags.toMutableSet()
+            var updatedDeletedFields = currentState.deletedFields.toMutableSet()
 
-            // Update each field
             fieldMap.forEach { (field, value) ->
                 val existingField = currentState.fieldStates[field]
                 if (existingField != null) {
-                    // Update existing field
-                    val updatedState = existingField.copy(
-                        textState = androidx.compose.foundation.text.input.TextFieldState(value)
-                    )
-                    newState = newState.copy(
-                        fieldStates = currentState.fieldStates + (field to updatedState)
+                    updatedFieldStates[field] = existingField.copy(
+                        textState = TextFieldState(value)
                     )
                 } else {
-                    // Add new field if it doesn't exist
-                    addField(field, value, false)
+                    updatedFieldStates[field] = EditorFieldState(
+                        textState = TextFieldState(value),
+                        enabledState = mutableStateOf(false)
+                    )
+                    updatedInvisibleTags.remove(field)
+                    updatedDeletedFields.remove(field)
                 }
             }
 
-            newState
+            currentState.copy(
+                fieldStates = updatedFieldStates,
+                invisibleTags = updatedInvisibleTags,
+                deletedFields = updatedDeletedFields
+            )
         }
 
         setChangesMade(true)
