@@ -41,6 +41,9 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.secam.simpletag.data.enums.SimpleTagField
 import dev.secam.simpletag.data.media.MediaRepo
 import dev.secam.simpletag.data.media.MusicData
+import dev.secam.simpletag.data.musicbrainz.MusicBrainzMapper
+import dev.secam.simpletag.data.musicbrainz.MusicBrainzRepository
+import dev.secam.simpletag.data.musicbrainz.models.MusicBrainzResult
 import dev.secam.simpletag.data.preferences.PreferencesRepo
 import dev.secam.simpletag.util.getMimeType
 import dev.secam.simpletag.util.tag.oggFileWriter
@@ -86,7 +89,8 @@ val SUPPORTS_RG = listOf(
 @HiltViewModel
 class EditorViewModel @Inject constructor(
     preferencesRepo: PreferencesRepo,
-    private val mediaRepo: MediaRepo
+    private val mediaRepo: MediaRepo,
+    private val musicBrainzRepository: MusicBrainzRepository
 ): ViewModel() {
     private val _uiState = MutableStateFlow(EditorUiState())
     val uiState = _uiState.asStateFlow()
@@ -615,6 +619,124 @@ class EditorViewModel @Inject constructor(
 //        }
         _uiState.update { it.copy(lyrics = lyrics) }
     }
+
+    /*      Auto Edit Methods     */
+
+    /**
+     * Fetch metadata from MusicBrainz based on current tag values
+     * @param queryParams Query parameters for MusicBrainz search
+     */
+    fun fetchAutoEditData(queryParams: AutoEditQueryParams) {
+        backgroundScope.launch {
+            _uiState.update { it.copy(autoEditState = AutoEditState.Loading) }
+
+            val result = musicBrainzRepository.searchReleases(
+                title = queryParams.title,
+                artist = queryParams.artist,
+                album = queryParams.album,
+                track = queryParams.track
+            )
+
+            when (result) {
+                is MusicBrainzResult.Success -> {
+                    if (result.data.isEmpty()) {
+                        _uiState.update {
+                            it.copy(
+                                autoEditState = AutoEditState.NoResults,
+                                autoEditResults = listOf(),
+                                showAutoEditDialog = true
+                            )
+                        }
+                    } else {
+                        _uiState.update {
+                            it.copy(
+                                autoEditState = AutoEditState.Success(result.data),
+                                autoEditResults = result.data,
+                                showAutoEditDialog = true
+                            )
+                        }
+                    }
+                }
+                is MusicBrainzResult.Error -> {
+                    _uiState.update {
+                        it.copy(
+                            autoEditState = AutoEditState.Error(result.exception.message ?: "Unknown error"),
+                            showAutoEditDialog = true
+                        )
+                    }
+                }
+                is MusicBrainzResult.NoResults -> {
+                    _uiState.update {
+                        it.copy(
+                            autoEditState = AutoEditState.NoResults,
+                            autoEditResults = listOf(),
+                            showAutoEditDialog = true
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Select a specific auto-edit result from the list
+     */
+    fun selectAutoEditResult(release: dev.secam.simpletag.data.musicbrainz.models.MusicBrainzRelease) {
+        _uiState.update { it.copy(selectedAutoEditResult = release) }
+    }
+
+    /**
+     * Apply the selected auto-edit result to the editor fields
+     */
+    fun applyAutoEditData(release: dev.secam.simpletag.data.musicbrainz.models.MusicBrainzRelease) {
+        val fieldMap = MusicBrainzMapper.mapToFieldStates(release)
+
+        _uiState.update { currentState ->
+            var newState = currentState
+
+            // Update each field
+            fieldMap.forEach { (field, value) ->
+                val existingField = currentState.fieldStates[field]
+                if (existingField != null) {
+                    // Update existing field
+                    val updatedState = existingField.copy(
+                        textState = androidx.compose.foundation.text.input.TextFieldState(value)
+                    )
+                    newState = newState.copy(
+                        fieldStates = currentState.fieldStates + (field to updatedState)
+                    )
+                } else {
+                    // Add new field if it doesn't exist
+                    addField(field, value, false)
+                }
+            }
+
+            newState
+        }
+
+        setChangesMade(true)
+        setShowAutoEditDialog(false)
+    }
+
+    /**
+     * Set the visibility of the auto-edit dialog
+     */
+    fun setShowAutoEditDialog(show: Boolean) {
+        _uiState.update { it.copy(showAutoEditDialog = show) }
+    }
+
+    /**
+     * Reset auto-edit state to idle
+     */
+    fun resetAutoEditState() {
+        _uiState.update {
+            it.copy(
+                autoEditState = AutoEditState.Idle,
+                autoEditResults = listOf(),
+                selectedAutoEditResult = null
+            )
+        }
+    }
 }
 
 data class EditorUiState(
@@ -642,6 +764,12 @@ data class EditorUiState(
     val showAddFieldDialog: Boolean = false,
     val showLyricsSheet: Boolean = false,
     val showSongSyncMissingDialog: Boolean = false,
+
+    /*      Auto Edit     */
+    val autoEditState: AutoEditState = AutoEditState.Idle,
+    val autoEditResults: List<dev.secam.simpletag.data.musicbrainz.models.MusicBrainzRelease> = listOf(),
+    val selectedAutoEditResult: dev.secam.simpletag.data.musicbrainz.models.MusicBrainzRelease? = null,
+    val showAutoEditDialog: Boolean = false,
 )
 
 data class EditorFieldState(

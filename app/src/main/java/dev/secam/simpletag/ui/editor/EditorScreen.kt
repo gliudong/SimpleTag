@@ -22,6 +22,12 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -37,7 +43,10 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.remember
@@ -56,6 +65,8 @@ import dev.secam.simpletag.data.media.MusicData
 import dev.secam.simpletag.ui.components.AnimatedFloatingActionButton
 import dev.secam.simpletag.ui.components.SimpleTopBar
 import dev.secam.simpletag.ui.editor.dialogs.AddFieldDialog
+import dev.secam.simpletag.ui.editor.dialogs.AutoEditLoadingDialog
+import dev.secam.simpletag.ui.editor.dialogs.AutoEditPreviewDialog
 import dev.secam.simpletag.ui.editor.dialogs.BackWarningDialog
 import dev.secam.simpletag.ui.editor.dialogs.HelpDialog
 import dev.secam.simpletag.ui.editor.dialogs.LogDialog
@@ -103,6 +114,10 @@ fun EditorScreen(
     val log = uiState.log
     val deletedFields = uiState.deletedFields
     val artworkEnabled = uiState.artworkEnabled
+    val autoEditState = uiState.autoEditState
+    val autoEditResults = uiState.autoEditResults
+    val selectedAutoEditResult = uiState.selectedAutoEditResult
+    val showAutoEditDialog = uiState.showAutoEditDialog
 
     // permission request (API30+)
     val onCancelText = stringResource(R.string.permission_denied)
@@ -213,6 +228,32 @@ fun EditorScreen(
                                 contentDescription = stringResource(R.string.cd_edit_lyrics)
                             )
                         }
+                        // Auto Edit button
+                        IconButton(
+                            onClick = {
+                                // Build query params from current tags
+                                val currentTitle = viewModel.uiState.value.fieldStates[SimpleTagField.Title]?.textState?.text?.toString() ?: ""
+                                val currentArtist = viewModel.uiState.value.fieldStates[SimpleTagField.Artist]?.textState?.text?.toString()
+                                val currentAlbum = viewModel.uiState.value.fieldStates[SimpleTagField.Album]?.textState?.text?.toString()
+                                val currentTrack = viewModel.uiState.value.fieldStates[SimpleTagField.Track]?.textState?.text?.toString()?.toIntOrNull()
+
+                                if (currentTitle.isNotBlank()) {
+                                    viewModel.fetchAutoEditData(
+                                        AutoEditQueryParams(
+                                            title = currentTitle,
+                                            artist = currentArtist?.ifBlank { null },
+                                            album = currentAlbum?.ifBlank { null },
+                                            track = currentTrack
+                                        )
+                                    )
+                                }
+                            }
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_auto_edit_24px),
+                                contentDescription = "Auto Edit"
+                            )
+                        }
                     }
                     if(musicList.size > 1){
                         IconButton(
@@ -244,7 +285,46 @@ fun EditorScreen(
 
                 }
             }
-            //  Basic Editor
+            //  Basic Editor - add horizontal toolbar for single file
+            else if (musicList.size == 1) {
+                HorizontalFloatingToolbar(
+                    expanded = true,
+                    floatingActionButton = {
+                        AnimatedFloatingActionButton(
+                            visible = true,
+                            icon = painterResource(R.drawable.ic_save_24px),
+                            iconDescription = stringResource(R.string.cd_save_tag_icon)
+                        ) { viewModel.setShowSaveDialog(true) }
+                    }
+                ) {
+                    // Auto Edit button
+                    IconButton(
+                        onClick = {
+                            val currentTitle = viewModel.uiState.value.fieldStates[SimpleTagField.Title]?.textState?.text?.toString() ?: ""
+                            val currentArtist = viewModel.uiState.value.fieldStates[SimpleTagField.Artist]?.textState?.text?.toString()
+                            val currentAlbum = viewModel.uiState.value.fieldStates[SimpleTagField.Album]?.textState?.text?.toString()
+                            val currentTrack = viewModel.uiState.value.fieldStates[SimpleTagField.Track]?.textState?.text?.toString()?.toIntOrNull()
+
+                            if (currentTitle.isNotBlank()) {
+                                viewModel.fetchAutoEditData(
+                                    AutoEditQueryParams(
+                                        title = currentTitle,
+                                        artist = currentArtist?.ifBlank { null },
+                                        album = currentAlbum?.ifBlank { null },
+                                        track = currentTrack
+                                    )
+                                )
+                            }
+                        }
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_auto_edit_24px),
+                            contentDescription = "Auto Edit"
+                        )
+                    }
+                }
+            }
+            //  Basic Editor - multiple files
             else {
                 AnimatedFloatingActionButton(
                     visible = true,
@@ -254,7 +334,7 @@ fun EditorScreen(
             }
 
         },
-        floatingActionButtonPosition = if(simpleEditor == false) FabPosition.Center else FabPosition.End,
+        floatingActionButtonPosition = if(simpleEditor == false || (simpleEditor == true && musicList.size == 1)) FabPosition.Center else FabPosition.End,
 
         snackbarHost = {
             SnackbarHost(snackbarHostState)
@@ -359,6 +439,109 @@ fun EditorScreen(
         }
         if(showSongSyncMissingDialog){
             SongSyncMissingDialog { viewModel.setShowSongSyncMissingDialog(false) }
+        }
+
+        // Auto Edit dialogs
+        if (showAutoEditDialog) {
+            when (autoEditState) {
+                is AutoEditState.Loading -> {
+                    AutoEditLoadingDialog(
+                        onDismiss = {
+                            viewModel.setShowAutoEditDialog(false)
+                            viewModel.resetAutoEditState()
+                        }
+                    )
+                }
+                is AutoEditState.Success -> {
+                    AutoEditPreviewDialog(
+                        releases = autoEditResults,
+                        selectedRelease = selectedAutoEditResult,
+                        onReleaseSelected = { release ->
+                            viewModel.selectAutoEditResult(release)
+                        },
+                        onApply = {
+                            selectedAutoEditResult?.let { release ->
+                                viewModel.applyAutoEditData(release)
+                            }
+                        },
+                        onDismiss = {
+                            viewModel.setShowAutoEditDialog(false)
+                            viewModel.resetAutoEditState()
+                        },
+                        onSearchAgain = {
+                            viewModel.resetAutoEditState()
+                            // Re-fetch with current parameters
+                            val currentTitle = viewModel.uiState.value.fieldStates[SimpleTagField.Title]?.textState?.text?.toString() ?: ""
+                            val currentArtist = viewModel.uiState.value.fieldStates[SimpleTagField.Artist]?.textState?.text?.toString()
+                            val currentAlbum = viewModel.uiState.value.fieldStates[SimpleTagField.Album]?.textState?.text?.toString()
+                            val currentTrack = viewModel.uiState.value.fieldStates[SimpleTagField.Track]?.textState?.text?.toString()?.toIntOrNull()
+
+                            if (currentTitle.isNotBlank()) {
+                                viewModel.fetchAutoEditData(
+                                    AutoEditQueryParams(
+                                        title = currentTitle,
+                                        artist = currentArtist?.ifBlank { null },
+                                        album = currentAlbum?.ifBlank { null },
+                                        track = currentTrack
+                                    )
+                                )
+                            }
+                        }
+                    )
+                }
+                is AutoEditState.Error -> {
+                    // Show error dialog
+                    dev.secam.simpletag.ui.components.SimpleDialog(
+                        title = "Error",
+                        onDismiss = {
+                            viewModel.setShowAutoEditDialog(false)
+                            viewModel.resetAutoEditState()
+                        }
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(16.dp)
+                        ) {
+                            Text(
+                                text = when (autoEditState) {
+                                    is AutoEditState.Error -> (autoEditState as AutoEditState.Error).message
+                                    else -> "Error fetching metadata"
+                                }
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.End
+                            ) {
+                                TextButton(
+                                    onClick = {
+                                        viewModel.setShowAutoEditDialog(false)
+                                        viewModel.resetAutoEditState()
+                                    }
+                                ) {
+                                    Text("OK")
+                                }
+                            }
+                        }
+                    }
+                }
+                is AutoEditState.NoResults -> {
+                    AutoEditPreviewDialog(
+                        releases = emptyList(),
+                        selectedRelease = null,
+                        onReleaseSelected = {},
+                        onApply = {},
+                        onDismiss = {
+                            viewModel.setShowAutoEditDialog(false)
+                            viewModel.resetAutoEditState()
+                        },
+                        onSearchAgain = {
+                            viewModel.setShowAutoEditDialog(false)
+                            viewModel.resetAutoEditState()
+                        }
+                    )
+                }
+                else -> {}
+            }
         }
     }
 }

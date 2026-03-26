@@ -233,5 +233,21 @@
     <string name="simple_editor">Simple Editor</string>
     <string name="simple_editor_long">Use a more basic editor with less features</string>
 
+    <!-- Auto Edit -->
+    <string name="auto_edit">Auto Edit</string>
+    <string name="cd_auto_edit">Fetch metadata from MusicBrainz</string>
+    <string name="auto_edit_loading">Fetching metadata from MusicBrainz…</string>
+    <string name="auto_edit_loading_title">Searching MusicBrainz</string>
+    <string name="auto_edit_no_results">No results found</string>
+    <string name="auto_edit_no_results_message">Couldn\'t find matching metadata. Try searching with different parameters.</string>
+    <string name="auto_edit_error">Error fetching metadata</string>
+    <string name="auto_edit_network_error">Network error. Please check your connection.</string>
+    <string name="auto_edit_timeout">Request timed out. Please try again.</string>
+    <string name="auto_edit_rate_limit">Too many requests. Please wait a moment.</string>
+    <string name="auto_edit_select_release">Select Matching Release</string>
+    <string name="auto_edit_apply">Apply Metadata</string>
+    <string name="auto_edit_search_again">Search Again</string>
+    <string name="auto_edit_custom_query">Custom Query</string>
+
 
 </resources>
