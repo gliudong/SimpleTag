@@ -17,7 +17,7 @@ ADB="$ANDROID_SDK/platform-tools/adb"
 
 # 应用信息
 PACKAGE_NAME="dev.secam.simpletag.debug"
-ACTIVITY="dev.secam.simpletag.MainActivity"
+ACTIVITY="dev.secam.simpletag.ui.MainActivity"
 
 echo -e "${BLUE}🚀 SimpleTag Live Preview${NC}"
 echo "======================================"
@@ -38,7 +38,7 @@ check_device() {
 initial_install() {
     echo -e "${BLUE}📦 Installing initial build...${NC}"
     ./gradlew installDebug
-    $ADB shell am start -n "$PACKAGE_NAME/.$ACTIVITY"
+    $ADB shell am start -n "$PACKAGE_NAME/$ACTIVITY"
     echo -e "${GREEN}✅ Initial install complete${NC}"
 }
 
@@ -75,7 +75,7 @@ build_and_deploy() {
         APK_PATH="app/build/outputs/apk/debug/SimpleTag_*.apk"
         if $ADB install -r $APK_PATH 2>/dev/null; then
             # 启动应用
-            $ADB shell am start -n "$PACKAGE_NAME/.$ACTIVITY" >/dev/null 2>&1
+            $ADB shell am start -n "$PACKAGE_NAME/$ACTIVITY" >/dev/null 2>&1
 
             END_TIME=$(date +%s)
             ELAPSED=$((END_TIME - START_TIME))

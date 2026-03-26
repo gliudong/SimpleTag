@@ -1,24 +1,22 @@
 package dev.secam.simpletag.data.musicbrainz
 
-import android.util.Xml
+import android.util.Log
 import dev.secam.simpletag.data.musicbrainz.models.MusicBrainzException
 import dev.secam.simpletag.data.musicbrainz.models.MusicBrainzRelease
 import dev.secam.simpletag.data.musicbrainz.models.MusicBrainzResult
 import dev.secam.simpletag.data.musicbrainz.models.ErrorType
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import okhttp3.ResponseBody
-import org.xmlpull.v1.XmlPullParser
-import java.io.StringReader
+import org.json.JSONArray
+import org.json.JSONObject
 import java.util.concurrent.TimeUnit
-import kotlin.math.min
 
 /**
  * Repository for MusicBrainz API operations
  * Features:
  * - Rate limiting (1 request/second per MusicBrainz policy)
  * - In-memory caching with LruCache (max 50 entries)
- * - XML parsing for API responses
+ * - JSON parsing for API responses
  * - Error handling and retry logic
  */
 class MusicBrainzRepository(
@@ -35,11 +33,6 @@ class MusicBrainzRepository(
 
     /**
      * Search for releases matching the given criteria
-     * @param title Track title (required)
-     * @param artist Artist name (optional)
-     * @param album Album name (optional)
-     * @param track Track number (optional)
-     * @return MusicBrainzResult with list of releases or error
      */
     suspend fun searchReleases(
         title: String,
@@ -47,7 +40,6 @@ class MusicBrainzRepository(
         album: String? = null,
         track: Int? = null
     ): MusicBrainzResult<List<MusicBrainzRelease>> {
-        // Build query
         val query = buildQueryString(title, artist, album, track)
         val cacheKey = getCacheKey(query)
 
@@ -70,19 +62,22 @@ class MusicBrainzRepository(
             val response = apiService.searchReleases(
                 query = query,
                 limit = 10,
-                format = "xml"
+                format = "json"  // Use JSON instead of XML
             )
 
-            val releases = parseReleasesResponse(response.string())
+            val json = JSONObject(response.string())
+            val releases = parseJsonResponse(json)
+
+            Log.d(TAG, "Query: $query -> ${releases.size} results")
 
             if (releases.isEmpty()) {
                 MusicBrainzResult.NoResults
             } else {
-                // Cache the results
                 cache.put(cacheKey, releases)
                 MusicBrainzResult.Success(releases)
             }
         } catch (e: Exception) {
+            Log.e(TAG, "Search failed", e)
             when {
                 e is java.net.SocketTimeoutException ||
                 e is java.net.UnknownHostException -> {
@@ -98,7 +93,7 @@ class MusicBrainzRepository(
                 e is retrofit2.HttpException && e.code() == 404 -> {
                     MusicBrainzResult.NoResults
                 }
-                e.message?.contains("XML", ignoreCase = true) == true -> {
+                e is org.json.JSONException -> {
                     MusicBrainzResult.Error(
                         MusicBrainzException(ErrorType.PARSE_ERROR, "Failed to parse response", e)
                     )
@@ -113,7 +108,10 @@ class MusicBrainzRepository(
     }
 
     /**
-     * Build MusicBrainz query string from parameters
+     * Build MusicBrainz query string from parameters.
+     * Uses a relaxed keyword approach instead of strict AND matching.
+     * MusicBrainz AND queries require exact match, so we use simple
+     * keyword concatenation which does OR-like fuzzy matching.
      */
     private fun buildQueryString(
         title: String,
@@ -123,175 +121,163 @@ class MusicBrainzRepository(
     ): String {
         val parts = mutableListOf<String>()
 
-        // Add artist if available
-        artist?.let {
-            parts.add("artist:\"$it\"")
-        }
+        // Use simple keyword search — MusicBrainz does fuzzy matching
+        // Exact AND queries with quotes are too strict and often return 0 results
+        artist?.let { parts.add(it) }
+        album?.let { parts.add(it) }
+        parts.add(title)
+        // Don't include track number in the search query — it's too restrictive
 
-        // Add album if available
-        album?.let {
-            parts.add("release:\"$it\"")
-        }
-
-        // Add title (required)
-        parts.add("recording:\"$title\"")
-
-        // Add track number if available
-        track?.let {
-            parts.add("number:$it")
-        }
-
-        return parts.joinToString(" AND ")
+        return parts.joinToString(" ")
     }
 
-    /**
-     * Generate cache key from query string
-     */
     private fun getCacheKey(query: String): String {
         return query.lowercase().trim()
     }
 
     /**
-     * Parse MusicBrainz XML response for releases
+     * Parse MusicBrainz JSON response
+     *
+     * JSON structure:
+     * {
+     *   "created": "...",
+     *   "count": N,
+     *   "offset": 0,
+     *   "releases": [
+     *     {
+     *       "id": "mbid",
+     *       "title": "...",
+     *       "status": "...",
+     *       "date": "2020-01-01",
+     *       "country": "US",
+     *       "barcode": "...",
+     *       "asin": "...",
+     *       "artist-credit": [{ "artist": { "id": "...", "name": "...", ... } }],
+     *       "release-group": { "id": "...", "type": "...", ... },
+     *       "medium-list": [{ "track-list": [...], "track-count": N }],
+     *       "label-info-list": [{ "label": { "name": "..." }, "catalog-number": "..." }]
+     *     }
+     *   ]
+     * }
      */
-    private fun parseReleasesResponse(xmlString: String): List<MusicBrainzRelease> {
+    private fun parseJsonResponse(json: JSONObject): List<MusicBrainzRelease> {
         val releases = mutableListOf<MusicBrainzRelease>()
-        val parser: XmlPullParser = Xml.newPullParser()
-        parser.setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, false)
-        parser.setInput(StringReader(xmlString))
 
-        var currentRelease: MutableMap<String, String>? = null
-        var currentArtist: MutableMap<String, String>? = null
-        var currentText: String? = null
-        var inReleaseList = false
-        var inRelease = false
-        var inArtistCredit = false
-        var inNameCredit = false
-        var inArtist = false
-        var inMediumList = false
-        var inMedium = false
-        var inTrackList = false
-        var inTrack = false
-        var currentTrack: MutableMap<String, String>? = null
-        val tracks = mutableListOf<MutableMap<String, String>>()
+        if (!json.has("releases")) return releases
 
-        var eventType = parser.eventType
-        while (eventType != XmlPullParser.END_DOCUMENT) {
-            when (eventType) {
-                XmlPullParser.START_TAG -> {
-                    when (parser.name) {
-                        "release-list" -> inReleaseList = true
-                        "release" -> {
-                            inRelease = true
-                            currentRelease = mutableMapOf()
-                            // Get MBID from id attribute
-                            parser.getAttributeValue(null, "id")?.let {
-                                currentRelease?.set("id", it)
-                            }
-                        }
-                        "artist-credit" -> inArtistCredit = true
-                        "name-credit" -> inNameCredit = true
-                        "artist" -> {
-                            if (inRelease) {
-                                inArtist = true
-                                currentArtist = mutableMapOf()
-                                parser.getAttributeValue(null, "id")?.let {
-                                    currentArtist?.set("id", it)
-                                }
-                            }
-                        }
-                        "medium-list" -> inMediumList = true
-                        "medium" -> inMedium = true
-                        "track-list" -> inTrackList = true
-                        "track" -> {
-                            if (inMedium) {
-                                inTrack = true
-                                currentTrack = mutableMapOf()
-                                parser.getAttributeValue(null, "id")?.let {
-                                    currentTrack?.set("id", it)
-                                }
-                            }
-                        }
-                        "number", "position", "length", "title", "name",
-                        "date", "country", "label", "catalog-number",
-                        "barcode", "asin", "status", "type" -> {
-                            // These tags contain text content
-                            currentText = null
-                        }
-                    }
-                }
-                XmlPullParser.END_TAG -> {
-                    when (parser.name) {
-                        "release-list" -> inReleaseList = false
-                        "release" -> {
-                            inRelease = false
-                            currentRelease?.let { releaseMap ->
-                                val release = MusicBrainzRelease(
-                                    id = releaseMap["id"] ?: "",
-                                    title = releaseMap["title"] ?: "",
-                                    artist = releaseMap["artist"] ?: "",
-                                    artistId = releaseMap["artistId"],
-                                    album = releaseMap["title"] ?: "",
-                                    date = releaseMap["date"],
-                                    year = releaseMap["date"]?.substringBefore("-"),
-                                    country = releaseMap["country"],
-                                    label = releaseMap["label"],
-                                    catalogNumber = releaseMap["catalog-number"],
-                                    trackCount = tracks.size,
-                                    tracks = tracks.map { trackMap ->
-                                        dev.secam.simpletag.data.musicbrainz.models.MusicBrainzTrack(
-                                            id = trackMap["id"] ?: "",
-                                            title = trackMap["title"] ?: "",
-                                            number = trackMap["number"]?.toIntOrNull() ?: 0,
-                                            duration = trackMap["length"]?.toIntOrNull()
-                                        )
-                                    },
-                                    coverArtUrl = releaseMap["id"]?.let { mbid ->
-                                        "https://coverartarchive.org/release/$mbid/front"
-                                    },
-                                    barcode = releaseMap["barcode"],
-                                    asin = releaseMap["asin"],
-                                    releaseStatus = releaseMap["status"],
-                                    releaseType = releaseMap["type"]
-                                )
-                                releases.add(release)
-                            }
-                            currentRelease = null
-                            tracks.clear()
-                        }
-                        "artist-credit" -> inArtistCredit = false
-                        "name-credit" -> inNameCredit = false
-                        "artist" -> {
-                            if (inRelease) {
-                                inArtist = false
-                                currentArtist = null
-                            }
-                        }
-                        "medium-list" -> inMediumList = false
-                        "medium" -> inMedium = false
-                        "track-list" -> inTrackList = false
-                        "track" -> {
-                            if (inMedium) {
-                                inTrack = false
-                                currentTrack?.let { tracks.add(it) }
-                                currentTrack = null
-                            }
-                        }
-                    }
-                }
-                XmlPullParser.TEXT -> {
-                    currentText = parser.text
-                }
+        val releasesArray = json.getJSONArray("releases")
+
+        for (i in 0 until releasesArray.length().coerceAtMost(10)) {
+            try {
+                val releaseObj = releasesArray.getJSONObject(i)
+                val release = parseRelease(releaseObj)
+                releases.add(release)
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to parse release at index $i", e)
             }
-            eventType = parser.next()
         }
 
         return releases
     }
 
-    /**
-     * Clear the cache
-     */
+    private fun parseRelease(obj: JSONObject): MusicBrainzRelease {
+        val id = obj.getString("id")
+
+        // Parse artist from artist-credit
+        val artistCredit = obj.optJSONArray("artist-credit")
+        var artistName = ""
+        var artistId: String? = null
+        if (artistCredit != null && artistCredit.length() > 0) {
+            val firstCredit = artistCredit.getJSONObject(0)
+            val artistObj = firstCredit.optJSONObject("artist")
+            if (artistObj != null) {
+                artistName = artistObj.optString("name", "")
+                artistId = artistObj.optString("id", null)
+            }
+        }
+
+        val title = obj.optString("title", "")
+        val date = obj.optString("date", null)
+        val country = obj.optString("country", null)
+        val barcode = obj.optString("barcode", null)
+        val asin = obj.optString("asin", null)
+        val status = obj.optString("status", null)
+
+        // Parse release-group for type
+        val releaseGroup = obj.optJSONObject("release-group")
+        var releaseType: String? = null
+        var releaseGroupId: String? = null
+        if (releaseGroup != null) {
+            releaseType = releaseGroup.optString("type", null)
+            releaseGroupId = releaseGroup.optString("id", null)
+        }
+
+        // Parse label-info-list for label name and catalog number
+        val labelInfoList = obj.optJSONArray("label-info-list")
+        var label: String? = null
+        var catalogNumber: String? = null
+        if (labelInfoList != null && labelInfoList.length() > 0) {
+            val firstLabel = labelInfoList.getJSONObject(0)
+            val labelObj = firstLabel.optJSONObject("label")
+            if (labelObj != null) {
+                label = labelObj.optString("name", null)
+            }
+            catalogNumber = firstLabel.optString("catalog-number", null)
+        }
+
+        // Parse tracks from medium-list
+        var trackCount = 0
+        val tracks = mutableListOf<dev.secam.simpletag.data.musicbrainz.models.MusicBrainzTrack>()
+        val mediumList = obj.optJSONArray("medium-list")
+        if (mediumList != null) {
+            for (m in 0 until mediumList.length()) {
+                val medium = mediumList.getJSONObject(m)
+                val trackList = medium.optJSONArray("track-list")
+                if (trackList != null) {
+                    for (t in 0 until trackList.length()) {
+                        trackCount++
+                        val trackObj = trackList.getJSONObject(t)
+                        tracks.add(
+                            dev.secam.simpletag.data.musicbrainz.models.MusicBrainzTrack(
+                                id = trackObj.optString("id", ""),
+                                title = trackObj.optString("title", ""),
+                                number = trackObj.optInt("number", 0),
+                                duration = trackObj.optInt("length", 0).takeIf { it > 0 },
+                                artist = trackObj.optString("artist-credit", null)
+                            )
+                        )
+                    }
+                }
+                // Also get track-count from medium
+                val mediumTrackCount = medium.optInt("track-count", 0)
+                if (mediumTrackCount > trackCount) {
+                    trackCount = mediumTrackCount
+                }
+            }
+        }
+
+        return MusicBrainzRelease(
+            id = id,
+            title = title,
+            artist = artistName,
+            artistId = artistId,
+            album = title,
+            date = date,
+            year = date?.substringBefore("-"),
+            country = country,
+            label = label,
+            catalogNumber = catalogNumber,
+            trackCount = trackCount,
+            tracks = tracks,
+            coverArtUrl = "https://coverartarchive.org/release/$id/front",
+            barcode = barcode,
+            asin = asin,
+            releaseStatus = status,
+            releaseType = releaseType,
+            releaseGroupId = releaseGroupId
+        )
+    }
+
     fun clearCache() {
         cache.evictAll()
     }

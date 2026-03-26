@@ -628,6 +628,8 @@ class EditorViewModel @Inject constructor(
      */
     fun fetchAutoEditData(queryParams: AutoEditQueryParams) {
         backgroundScope.launch {
+            val queryDesc = "title=${queryParams.title}, artist=${queryParams.artist}, album=${queryParams.album}, track=${queryParams.track}"
+            Log.d("AutoEdit", "fetchAutoEditData: $queryDesc")
             _uiState.update { it.copy(autoEditState = AutoEditState.Loading) }
 
             val result = musicBrainzRepository.searchReleases(
@@ -636,6 +638,8 @@ class EditorViewModel @Inject constructor(
                 album = queryParams.album,
                 track = queryParams.track
             )
+
+            Log.d("AutoEdit", "Result type: ${result::class.simpleName}")
 
             when (result) {
                 is MusicBrainzResult.Success -> {
@@ -658,6 +662,7 @@ class EditorViewModel @Inject constructor(
                     }
                 }
                 is MusicBrainzResult.Error -> {
+                    Log.e("AutoEdit", "Error: ${result.exception.message}", result.exception)
                     _uiState.update {
                         it.copy(
                             autoEditState = AutoEditState.Error(result.exception.message ?: "Unknown error"),
