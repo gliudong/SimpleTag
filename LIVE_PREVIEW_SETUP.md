@@ -11,6 +11,13 @@
 
 ## 快速开始
 
+### 系统要求
+
+- macOS / Linux / Windows
+- Android SDK 已安装
+- **Apple Silicon Mac (M1/M2/M3)** - 自动使用 ARM64 系统镜像
+- **Intel Mac** - 自动使用 x86_64 系统镜像
+
 ### 一键设置（推荐）
 
 ```bash
@@ -175,6 +182,26 @@ adb logcat -s SimpleTag:* AndroidRuntime:E
 6. ✅ 10-30 秒内手机自动显示更新
 
 ## 故障排查
+
+### Apple Silicon Mac (M1/M2/M3) 架构问题
+
+如果您遇到以下错误：
+```
+FATAL | Avd's CPU Architecture 'x86_64' is not supported by the QEMU2 emulator on aarch64 host
+```
+
+**解决方案：**
+```bash
+# 删除旧的 x86_64 AVD
+$HOME/Library/Android/sdk/cmdline-tools/latest/bin/avdmanager delete avd -n SimpleTag_Emulator
+
+# 重新运行设置脚本（会自动检测架构）
+./setup-live-preview.sh
+```
+
+设置脚本会自动检测您的 Mac 架构并安装对应的系统镜像：
+- **Apple Silicon**: 使用 `arm64-v8a` 镜像
+- **Intel Mac**: 使用 `x86_64` 镜像
 
 ### 模拟器启动失败
 

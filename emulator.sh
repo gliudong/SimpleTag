@@ -12,10 +12,11 @@ start_emulator() {
         -avd $AVD_NAME \
         -gpu host \
         -no-snapshot \
-        -no-audio &
+        -no-boot-anim &
     echo "⏳ Waiting for emulator to be ready..."
     $ANDROID_SDK/platform-tools/adb wait-for-device
     echo "✅ Emulator is ready!"
+    echo "📱 Emulator window should be visible now"
 }
 
 stop_emulator() {

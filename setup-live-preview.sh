@@ -24,23 +24,37 @@ fi
 
 echo -e "${GREEN}✅ Android SDK found${NC}"
 
+# 检测系统架构
+ARCH=$(uname -m)
+if [ "$ARCH" = "arm64" ]; then
+    IMAGE_ARCH="arm64-v8a"
+    echo -e "${GREEN}✅ Detected Apple Silicon Mac (ARM64)${NC}"
+else
+    IMAGE_ARCH="x86_64"
+    echo -e "${GREEN}✅ Detected Intel Mac (x86_64)${NC}"
+fi
+
 # 安装 emulator
 echo -e "${BLUE}📦 Installing emulator...${NC}"
 $ANDROID_SDK/cmdline-tools/latest/bin/sdkmanager --install "emulator"
 
-# 安装系统镜像（选择 Android 34）
-echo -e "${BLUE}📦 Installing system image (Android 34)...${NC}"
-$ANDROID_SDK/cmdline-tools/latest/bin/sdkmanager --install "system-images;android-34;google_apis;x86_64" || {
+# 安装系统镜像（根据架构选择）
+echo -e "${BLUE}📦 Installing system image (Android 34, ${IMAGE_ARCH})...${NC}"
+$ANDROID_SDK/cmdline-tools/latest/bin/sdkmanager --install "system-images;android-34;google_apis;${IMAGE_ARCH}" || {
     echo -e "${YELLOW}⚠️  Android 34 not available, trying Android 31...${NC}"
-    $ANDROID_SDK/cmdline-tools/latest/bin/sdkmanager --install "system-images;android-31;google_apis;x86_64"
+    $ANDROID_SDK/cmdline-tools/latest/bin/sdkmanager --install "system-images;android-31;google_apis;${IMAGE_ARCH}"
     IMAGE_VERSION="31"
 }
+
+# 删除旧的 AVD（如果存在）
+echo -e "${BLUE}🗑️  Cleaning up old AVD (if any)...${NC}"
+$ANDROID_SDK/cmdline-tools/latest/bin/avdmanager delete avd -n SimpleTag_Emulator 2>/dev/null || true
 
 # 创建 AVD
 echo -e "${BLUE}📱 Creating AVD...${NC}"
 $ANDROID_SDK/cmdline-tools/latest/bin/avdmanager create avd \
     -n SimpleTag_Emulator \
-    -k "system-images;android-${IMAGE_VERSION:-34};google_apis;x86_64" \
+    -k "system-images;android-${IMAGE_VERSION:-34};google_apis;${IMAGE_ARCH}" \
     -d 1 \
     -f
 
