@@ -51,7 +51,7 @@ SimpleTag is a Material You audio tagger built with Jetpack Compose. Supports mo
 
 **Alternatively** download the apk directly from the [releases](https://github.com/sergcam/SimpleTag/releases) section
 
-## Contribute 
+## Contribute
 Like SimpleTag and want to support it in some way? Help translate it into your language. Donations are also appreciated.
 #### Translate
 [![crowdin](https://img.shields.io/badge/crowdin-263238?style=for-the-badge&logo=crowdin&logoColor=ffffff
@@ -60,6 +60,99 @@ Like SimpleTag and want to support it in some way? Help translate it into your l
 #### Donate
 [![Ko-fi](https://img.shields.io/badge/Ko--fi-FF5E5B?logo=ko-fi&logoColor=white&style=for-the-badge)](https://ko-fi.com/sergcam)
 [![Liberapay](https://img.shields.io/badge/Liberapay-F6C915?logo=liberapay&logoColor=black&style=for-the-badge)](https://liberapay.com/sergcam)
+
+## Development
+
+### Quick Start
+
+```bash
+# Clone the repository
+git clone https://github.com/sergcam/SimpleTag.git
+cd SimpleTag
+
+# Build the project
+./gradlew assembleDebug
+
+# Install to connected device
+./gradlew installDebug
+```
+
+### Live Preview Setup ⚡
+
+For an efficient development workflow with live preview (10-20s deployment after code changes):
+
+<details>
+<summary><b>🚀 One-time Setup (Click to expand)</b></summary>
+
+```bash
+# Run the automatic setup script
+chmod +x setup-live-preview.sh
+./setup-live-preview.sh
+```
+
+This will install and configure:
+- Android Emulator
+- System image (Android 34)
+- File watcher tools
+- All required scripts
+
+</details>
+
+<details>
+<summary><b>📱 Daily Development (Click to expand)</b></summary>
+
+```bash
+# Start emulator
+./emulator.sh start
+
+# Wait for boot (30-60s), then start live preview
+./watch-and-deploy.sh
+
+# Now edit code - changes auto-deploy in 10-20s!
+```
+
+**Available commands:**
+```bash
+./emulator.sh start/stop/status  # Manage emulator
+./watch-and-deploy.sh            # Live preview
+./quick-deploy.sh                # Manual deploy
+make watch                       # Using Makefile shortcuts
+make deploy
+```
+
+**Or use a physical device:**
+```bash
+# Connect phone with USB debugging enabled
+./watch-and-deploy.sh  # Auto-detects device
+```
+
+</details>
+
+📖 **Full setup guide:** [LIVE_PREVIEW_SETUP.md](LIVE_PREVIEW_SETUP.md)
+
+### Build Variants
+
+- **Debug**: `./gradlew assembleDebug` - Fast build with debugging enabled
+- **Release**: `./gradlew assembleRelease` - Optimized build with ProGuard/R8
+
+### Tech Stack
+
+- **Language:** Kotlin
+- **UI:** Jetpack Compose with Material 3
+- **Architecture:** MVVM with Hilt dependency injection
+- **Audio Tagging:** [jaudiotagger](https://www.jthink.net/jaudiotagger/) (embedded)
+- **Async:** Kotlin Coroutines & Flow
+- **Image Loading:** Coil
+
+### Project Structure
+
+```
+app/src/main/java/dev/secam/simpletag/
+├── ui/              # Compose UI screens and components
+├── data/            # Repositories and data models
+├── di/              # Hilt dependency injection
+└── util/            # Utilities (tag I/O, helpers)
+```
 
 ## License
 Copyright (C) 2025  Sergio Camacho
