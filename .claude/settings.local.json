@@ -14,7 +14,12 @@
       "Bash(yes)",
       "Bash(sdkmanager --licenses)",
       "Bash(sdkmanager \"platform-tools\" \"platforms;android-36\" \"build-tools;36.0.0\")",
-      "Bash(sdkmanager --list_installed)"
+      "Bash(sdkmanager --list_installed)",
+      "Bash(./gradlew tasks:*)",
+      "Bash(brew list:*)",
+      "Bash($HOME/Library/Android/sdk/cmdline-tools/latest/bin/sdkmanager --list)",
+      "Bash($HOME/Library/Android/sdk/cmdline-tools/latest/bin/avdmanager list:*)",
+      "Bash(检查 emulator:*)"
     ]
   }
 }

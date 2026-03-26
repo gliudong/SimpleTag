@@ -4,6 +4,8 @@
 /.idea
 /app/release
 .DS_Store
+!/app/build/outputs/apk/debug/*.apk
+/app/build/
 /build
 /captures
 .externalNativeBuild
