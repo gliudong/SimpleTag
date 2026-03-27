@@ -72,6 +72,8 @@ import org.jaudiotagger.tag.mp4.Mp4Tag
 import org.jaudiotagger.tag.vorbiscomment.VorbisCommentTag
 import java.io.File
 import java.nio.file.AccessDeniedException
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import java.util.ArrayList
 import javax.inject.Inject
 
@@ -90,7 +92,8 @@ val SUPPORTS_RG = listOf(
 class EditorViewModel @Inject constructor(
     preferencesRepo: PreferencesRepo,
     private val mediaRepo: MediaRepo,
-    private val musicBrainzRepository: MusicBrainzRepository
+    private val musicBrainzRepository: MusicBrainzRepository,
+    private val okHttpClient: OkHttpClient
 ): ViewModel() {
     private val _uiState = MutableStateFlow(EditorUiState())
     val uiState = _uiState.asStateFlow()
@@ -726,6 +729,30 @@ class EditorViewModel @Inject constructor(
 
         setChangesMade(true)
         setShowAutoEditDialog(false)
+    }
+
+    /**
+     * Download cover art from URL and apply to editor
+     */
+    fun fetchAndApplyCoverArt(coverArtUrl: String?) {
+        if (coverArtUrl.isNullOrBlank()) return
+        backgroundScope.launch {
+            try {
+                val request = Request.Builder().url(coverArtUrl).build()
+                val response = okHttpClient.newCall(request).execute()
+                if (response.isSuccessful) {
+                    val bytes = response.body?.bytes() ?: return@launch
+                    val artwork = org.jaudiotagger.tag.images.AndroidArtwork()
+                    artwork.binaryData = bytes
+                    artwork.mimeType = response.body?.contentType()?.toString() ?: "image/jpeg"
+                    artwork.description = ""
+                    artwork.pictureType = org.jaudiotagger.tag.reference.PictureTypes.DEFAULT_ID
+                    setArtwork(artwork)
+                }
+            } catch (e: Exception) {
+                Log.e("AutoEdit", "Failed to fetch cover art", e)
+            }
+        }
     }
 
     /**

@@ -1,11 +1,14 @@
 package dev.secam.simpletag.ui.editor.dialogs
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -17,6 +20,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
@@ -33,6 +37,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import coil3.compose.AsyncImage
 import dev.secam.simpletag.R
 import dev.secam.simpletag.data.musicbrainz.models.MusicBrainzRelease
 
@@ -71,7 +76,6 @@ fun AutoEditPreviewDialog(
                 Spacer(modifier = Modifier.height(16.dp))
 
                 if (releases.isEmpty()) {
-                    // No results state
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -91,7 +95,6 @@ fun AutoEditPreviewDialog(
                         )
                     }
                 } else {
-                    // List of releases
                     LazyColumn(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -110,7 +113,6 @@ fun AutoEditPreviewDialog(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Action buttons
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -168,19 +170,26 @@ private fun ReleaseCard(
                 .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Album artwork placeholder
-            Image(
-                painter = painterResource(R.drawable.ic_music_note_24),
-                contentDescription = null,
+            // Album artwork from Cover Art Archive
+            Box(
+                contentAlignment = Alignment.Center,
                 modifier = Modifier
                     .size(56.dp)
-                    .clip(RoundedCornerShape(8.dp)),
-                contentScale = ContentScale.Crop
-            )
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(MaterialTheme.colorScheme.surfaceContainer)
+            ) {
+                AsyncImage(
+                    model = release.coverArtUrl,
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop,
+                    placeholder = painterResource(R.drawable.ic_music_note_24),
+                    error = painterResource(R.drawable.ic_music_note_24)
+                )
+            }
 
             Spacer(modifier = Modifier.width(12.dp))
 
-            // Release info
             Column(
                 modifier = Modifier.weight(1f)
             ) {
@@ -228,7 +237,6 @@ private fun ReleaseCard(
                 }
             }
 
-            // Radio button for selection
             RadioButton(
                 selected = isSelected,
                 onClick = onClick

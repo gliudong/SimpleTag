@@ -83,6 +83,7 @@ dependencies {
 
     //coil
     implementation(libs.coil.compose)
+    implementation(libs.coil.network.okhttp)
 
     // hilt
     implementation(libs.hilt.android)

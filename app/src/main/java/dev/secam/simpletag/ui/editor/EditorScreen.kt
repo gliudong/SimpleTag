@@ -462,6 +462,7 @@ fun EditorScreen(
                         onApply = {
                             selectedAutoEditResult?.let { release ->
                                 viewModel.applyAutoEditData(release)
+                                viewModel.fetchAndApplyCoverArt(release.coverArtUrl)
                             }
                         },
                         onDismiss = {

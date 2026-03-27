@@ -24,6 +24,7 @@ import coil3.disk.directory
 import coil3.memory.MemoryCache
 import coil3.request.crossfade
 import coil3.util.DebugLogger
+import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 
 fun myImageLoader(context: PlatformContext): ImageLoader {
     return ImageLoader.Builder(context)
@@ -42,6 +43,7 @@ fun myImageLoader(context: PlatformContext): ImageLoader {
         .components {
             add(MusicDataKeyer)
             add(MusicDataFetcher.Factory())
+            add(OkHttpNetworkFetcherFactory())
         }
         .crossfade(true)
         .build()
