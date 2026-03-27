@@ -1,0 +1,22 @@
+{
+    "sourceFile": "autoedit.md",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 1,
+            "patches": [
+                {
+                    "date": 1774536770517,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                },
+                {
+                    "date": 1774536992958,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n@@ -1,5 +1,14 @@\n # 自动编辑\n \n “自动编辑”的核心：数据匹配 (Auto-Matching)\n \n-当更新标签缺失时，通过以下特征去云端查询：\n\\ No newline at end of file\n+当更新标签缺失时，通过以下特征去云端查询：\n+\n+# 流程\n+\n+在点击音乐列表\n+进入 edit tag 页面\n+edit tag 页面添加自动编辑按钮\n+使用 MusicBrainz 获取新的 标签数据\n+预览标签数据\n+确认更新，将更新数据\n\\ No newline at end of file\n"
+                }
+            ],
+            "date": 1774536770517,
+            "name": "Commit-0",
+            "content": "# 自动编辑\n\n“自动编辑”的核心：数据匹配 (Auto-Matching)\n\n当更新标签缺失时，通过以下特征去云端查询："
+        }
+    ]
+}

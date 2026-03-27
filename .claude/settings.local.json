@@ -19,7 +19,15 @@
       "Bash(brew list:*)",
       "Bash($HOME/Library/Android/sdk/cmdline-tools/latest/bin/sdkmanager --list)",
       "Bash($HOME/Library/Android/sdk/cmdline-tools/latest/bin/avdmanager list:*)",
-      "Bash(检查 emulator:*)"
+      "Bash(检查 emulator:*)",
+      "Bash(./gradlew assembleDebug)",
+      "Bash(curl -s -H \"User-Agent: SimpleTag-Android/0.3.1 \\( https://github.com/test/SimpleTag \\)\" \"https://musicbrainz.org/ws/2/release/?query=artist:\"\"Kai%20Engel\"\"+AND+recording:\"\"Sentinel\"\"&fmt=json\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(f''''count={d[\"\"count\"\"]}, releases={len\\(d[\"\"releases\"\"]\\)}''''\\)\")",
+      "Bash(curl -s -H \"User-Agent: SimpleTag-Android/0.3.1 \\( https://github.com/test/SimpleTag \\)\" \"https://musicbrainz.org/ws/2/release/?query=artist:\"\"Kai%20Engel\"\"+AND+release:\"\"Satin\"\"&fmt=json\")",
+      "Bash(curl -s -H \"User-Agent: SimpleTag-Android/0.3.1 \\( https://github.com/test/SimpleTag \\)\" \"https://musicbrainz.org/ws/2/release/?query=Kai+Engel+Satin&fmt=json\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); [print\\(f''''  - {r[\"\"title\"\"]} \\({r.get\\(\"\"date\"\",\"\"\"\"\\)}\\)''''\\) for r in d[''''releases''''][:5]]; print\\(f''''count={d[\"\"count\"\"]}''''\\)\")",
+      "Bash(./gradlew clean:*)",
+      "Bash(./gradlew assembleDebug --no-build-cache)"
     ]
   }
 }
