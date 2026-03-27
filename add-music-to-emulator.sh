@@ -24,40 +24,42 @@ if ! $ADB devices | grep -q "device$"; then
 fi
 echo -e "${GREEN}✓ 模拟器已连接${NC}"
 
-# 2. 创建临时目录
-echo -e "\n${YELLOW}2. 创建临时下载目录...${NC}"
+# 2. 检查临时目录
+echo -e "\n${YELLOW}2. 检查本地缓存...${NC}"
 mkdir -p "$TEMP_DIR"
 cd "$TEMP_DIR"
 
-# 3. 下载测试音乐文件
-echo -e "\n${YELLOW}3. 下载测试音乐文件...${NC}"
-
-# 下载公开的测试音频文件
-echo "  下载测试音频文件 (来自免费音频源)..."
-
-# 使用一些公开的免费音频测试文件
-# 文件1: Happy Whistle
-echo "  下载 happy_whistle.mp3..."
-curl -L -o "happy_whistle.mp3" "https://files.freemusicarchive.org/storage-freemusicarchive-org/music/no_curator/Simon_Panrucker/Happy_TV_Songs/Simon_Panrucker_-_01_-_Whistle.mp3" --max-time 60 2>/dev/null && echo -e "    ${GREEN}✓ 下载成功${NC}" || echo -e "    ${RED}✗ 下载失败${NC}"
-
-# 文件2: Sentinel
-echo "  下载 sentinel.mp3..."
-curl -L -o "sentinel.mp3" "https://files.freemusicarchive.org/storage-freemusicarchive-org/music/ccCommunity/Kai_Engel/Satin/Kai_Engel_-_04_-_Sentinel.mp3" --max-time 60 2>/dev/null && echo -e "    ${GREEN}✓ 下载成功${NC}" || echo -e "    ${RED}✗ 下载失败${NC}"
-
-# 文件3: 尝试从其他源下载
-echo "  下载 test_audio.mp3..."
-curl -L -o "test_audio.mp3" "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3" --max-time 60 2>/dev/null && echo -e "    ${GREEN}✓ 下载成功${NC}" || echo -e "    ${RED}✗ 下载失败${NC}"
-
-# 检查是否有文件下载成功
 DOWNLOADED_COUNT=$(ls -1 *.mp3 *.flac *.ogg 2>/dev/null | wc -l)
-if [ "$DOWNLOADED_COUNT" -eq 0 ]; then
-    echo -e "\n${RED}错误: 没有成功下载任何音频文件${NC}"
-    cd ..
-    rm -rf "$TEMP_DIR"
-    exit 1
-fi
+if [ "$DOWNLOADED_COUNT" -gt 0 ]; then
+    echo -e "${GREEN}✓ 本地已有 $DOWNLOADED_COUNT 个音频文件，跳过下载${NC}"
+else
+    # 3. 下载测试音乐文件
+    echo -e "\n${YELLOW}3. 下载测试音乐文件...${NC}"
+    echo "  下载测试音频文件 (来自免费音频源)..."
 
-echo -e "${GREEN}✓ 成功下载 $DOWNLOADED_COUNT 个音频文件${NC}"
+    # 文件1: Happy Whistle
+    echo "  下载 happy_whistle.mp3..."
+    curl -L -o "happy_whistle.mp3" "https://files.freemusicarchive.org/storage-freemusicarchive-org/music/no_curator/Simon_Panrucker/Happy_TV_Songs/Simon_Panrucker_-_01_-_Whistle.mp3" --max-time 60 2>/dev/null && echo -e "    ${GREEN}✓ 下载成功${NC}" || echo -e "    ${RED}✗ 下载失败${NC}"
+
+    # 文件2: Sentinel
+    echo "  下载 sentinel.mp3..."
+    curl -L -o "sentinel.mp3" "https://files.freemusicarchive.org/storage-freemusicarchive-org/music/ccCommunity/Kai_Engel/Satin/Kai_Engel_-_04_-_Sentinel.mp3" --max-time 60 2>/dev/null && echo -e "    ${GREEN}✓ 下载成功${NC}" || echo -e "    ${RED}✗ 下载失败${NC}"
+
+    # 文件3: 尝试从其他源下载
+    echo "  下载 test_audio.mp3..."
+    curl -L -o "test_audio.mp3" "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3" --max-time 60 2>/dev/null && echo -e "    ${GREEN}✓ 下载成功${NC}" || echo -e "    ${RED}✗ 下载失败${NC}"
+
+    # 检查是否有文件下载成功
+    DOWNLOADED_COUNT=$(ls -1 *.mp3 *.flac *.ogg 2>/dev/null | wc -l)
+    if [ "$DOWNLOADED_COUNT" -eq 0 ]; then
+        echo -e "\n${RED}错误: 没有成功下载任何音频文件${NC}"
+        cd ..
+        rm -rf "$TEMP_DIR"
+        exit 1
+    fi
+
+    echo -e "${GREEN}✓ 成功下载 $DOWNLOADED_COUNT 个音频文件${NC}"
+fi
 
 # 4. 在模拟器中创建目录
 echo -e "\n${YELLOW}4. 在模拟器中创建音乐目录...${NC}"
@@ -102,10 +104,8 @@ echo -e "${GREEN}✓ MediaStore 中现在有 $MUSIC_COUNT 个音频文件${NC}"
 echo -e "\n${YELLOW}模拟器中的音乐文件:${NC}"
 $ADB shell ls -lh "$MUSIC_DIR/" 2>/dev/null || echo "  (无法列出文件)"
 
-# 11. 清理临时文件
-echo -e "\n${YELLOW}9. 清理临时文件...${NC}"
-rm -rf "$TEMP_DIR"
-echo -e "${GREEN}✓ 临时文件已清理${NC}"
+# 11. 保留临时文件供下次复用
+echo -e "\n${YELLOW}9. 本地缓存保留在 $TEMP_DIR/ 供下次复用${NC}"
 
 # 完成
 echo -e "\n${GREEN}=== 完成! ===${NC}"
