@@ -732,45 +732,71 @@ class EditorViewModel @Inject constructor(
         setShowAutoEditDialog(false)
     }
 
+    /** Cover art download error message, observed by UI to show snackbar */
+    private val _coverArtError = MutableStateFlow<String?>(null)
+
     /**
-     * Download cover art from URL and apply to editor
+     * Download cover art from URL and apply to editor.
+     * If release URL returns 404, notifies immediately and tries release-group URL in background.
      */
-    fun fetchAndApplyCoverArt(coverArtUrl: String?) {
+    fun fetchAndApplyCoverArt(coverArtUrl: String?, releaseGroupId: String? = null) {
         if (coverArtUrl.isNullOrBlank()) {
             Log.w("AutoEdit", "fetchAndApplyCoverArt: URL is null or blank, skipping")
             return
         }
-        Log.d("AutoEdit", "fetchAndApplyCoverArt: start downloading from $coverArtUrl")
         backgroundScope.launch {
-            try {
-                val request = Request.Builder().url(coverArtUrl).build()
-                val response = okHttpClient.newCall(request).execute()
-                Log.d("AutoEdit", "fetchAndApplyCoverArt: response code=${response.code}, message=${response.message}")
+            if (tryDownloadCoverArt(coverArtUrl)) return@launch
+            // First URL failed, notify immediately
+            Log.d("AutoEdit", "fetchAndApplyCoverArt: cover art not available")
+            _coverArtError.value = "Cover art not available"
+            // Still try fallback silently in background
+            if (!releaseGroupId.isNullOrBlank()) {
+                val groupUrl = "https://coverartarchive.org/release-group/$releaseGroupId/front"
+                Log.d("AutoEdit", "fetchAndApplyCoverArt: fallback to release-group URL: $groupUrl")
+                tryDownloadCoverArt(groupUrl)
+            }
+        }
+    }
+
+    fun clearCoverArtError() {
+        _coverArtError.value = null
+    }
+
+    val coverArtError = _coverArtError.asStateFlow()
+
+    private fun tryDownloadCoverArt(url: String): Boolean {
+        try {
+            val request = Request.Builder().url(url).build()
+            okHttpClient.newCall(request).execute().use { response ->
+                Log.d("AutoEdit", "fetchAndApplyCoverArt: url=$url, code=${response.code}")
                 if (response.isSuccessful) {
                     val body = response.body
                     if (body == null) {
                         Log.e("AutoEdit", "fetchAndApplyCoverArt: response body is null")
-                        return@launch
+                        return false
                     }
                     val bytes = body.bytes()
-                    Log.d("AutoEdit", "fetchAndApplyCoverArt: downloaded ${bytes.size} bytes, contentType=${body.contentType()}")
                     if (bytes.isEmpty()) {
                         Log.e("AutoEdit", "fetchAndApplyCoverArt: downloaded bytes are empty")
-                        return@launch
+                        return false
                     }
+                    val mimeType = body.contentType()?.let { "${it.type}/${it.subtype}" } ?: "image/jpeg"
                     val artwork = org.jaudiotagger.tag.images.AndroidArtwork()
                     artwork.binaryData = bytes
-                    artwork.mimeType = body.contentType()?.let { "${it.type}/${it.subtype}" } ?: "image/jpeg"
+                    artwork.mimeType = mimeType
                     artwork.description = ""
                     artwork.pictureType = org.jaudiotagger.tag.reference.PictureTypes.DEFAULT_ID
                     setArtwork(artwork)
-                    Log.d("AutoEdit", "fetchAndApplyCoverArt: artwork set successfully, mimeType=${artwork.mimeType}")
+                    Log.d("AutoEdit", "fetchAndApplyCoverArt: success, ${bytes.size} bytes, mimeType=$mimeType")
+                    return true
                 } else {
-                    Log.w("AutoEdit", "fetchAndApplyCoverArt: HTTP ${response.code}, cover art not available")
+                    Log.w("AutoEdit", "fetchAndApplyCoverArt: HTTP ${response.code}, not available")
+                    return false
                 }
-            } catch (e: Exception) {
-                Log.e("AutoEdit", "fetchAndApplyCoverArt: failed", e)
             }
+        } catch (e: Exception) {
+            Log.e("AutoEdit", "fetchAndApplyCoverArt: failed for $url", e)
+            return false
         }
     }
 

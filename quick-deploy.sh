@@ -6,12 +6,12 @@
 ANDROID_SDK="$HOME/Library/Android/sdk"
 ADB="$ANDROID_SDK/platform-tools/adb"
 PACKAGE_NAME="dev.secam.simpletag.debug"
-ACTIVITY="dev.secam.simpletag.MainActivity"
+ACTIVITY="dev.secam.simpletag.ui.MainActivity"
 
 echo "🔨 Building and deploying..."
 
 ./gradlew assembleDebug &&
 $ADB install -r app/build/outputs/apk/debug/SimpleTag_*.apk &&
-$ADB shell am start -n "$PACKAGE_NAME/.$ACTIVITY"
+$ADB shell am start -n "$PACKAGE_NAME/$ACTIVITY"
 
 echo "✅ Done!"

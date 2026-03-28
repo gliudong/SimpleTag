@@ -48,6 +48,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -90,6 +91,16 @@ fun EditorScreen(
     val activity = LocalActivity.current
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+
+    // Cover art download error
+    LaunchedEffect(Unit) {
+        viewModel.coverArtError.collect { error ->
+            if (error != null) {
+                snackbarHostState.showSnackbar(error)
+                viewModel.clearCoverArtError()
+            }
+        }
+    }
 
     // prefs
     val prefs = viewModel.prefState.collectAsState().value
@@ -461,9 +472,8 @@ fun EditorScreen(
                         },
                         onApply = {
                             selectedAutoEditResult?.let { release ->
-                                android.util.Log.d("AutoEdit", "onApply: release=${release.title}, coverArtUrl=${release.coverArtUrl}")
                                 viewModel.applyAutoEditData(release)
-                                viewModel.fetchAndApplyCoverArt(release.coverArtUrl)
+                                viewModel.fetchAndApplyCoverArt(release.coverArtUrl, release.releaseGroupId)
                             }
                         },
                         onDismiss = {
