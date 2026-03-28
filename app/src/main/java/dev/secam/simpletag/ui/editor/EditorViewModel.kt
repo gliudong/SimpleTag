@@ -44,7 +44,10 @@ import dev.secam.simpletag.data.media.MusicData
 import dev.secam.simpletag.data.musicbrainz.MusicBrainzMapper
 import dev.secam.simpletag.data.musicbrainz.MusicBrainzRepository
 import dev.secam.simpletag.data.musicbrainz.models.MusicBrainzResult
+import dev.secam.simpletag.data.musicbrainz.models.MusicBrainzRecording
 import dev.secam.simpletag.data.preferences.PreferencesRepo
+import dev.secam.simpletag.util.FileNameParser
+import dev.secam.simpletag.util.FileNameParseResult
 import dev.secam.simpletag.util.getMimeType
 import dev.secam.simpletag.util.tag.oggFileWriter
 import dev.secam.simpletag.util.tag.setArtworkField
@@ -815,8 +818,341 @@ class EditorViewModel @Inject constructor(
             it.copy(
                 autoEditState = AutoEditState.Idle,
                 autoEditResults = listOf(),
-                selectedAutoEditResult = null
+                selectedAutoEditResult = null,
+                autoEditTrackItems = listOf(),
+                autoEditRecordingItems = listOf()
             )
+        }
+    }
+
+    /*      Filename Auto Edit Methods     */
+
+    /**
+     * Parse filename and show confirm dialog for auto edit
+     * @param filePath The full path to the audio file
+     */
+    fun parseAndShowConfirmDialog(filePath: String) {
+        val fileName = File(filePath).name
+        val parseResult = FileNameParser.parse(fileName)
+
+        Log.d("AutoEdit", "Parsed filename: $fileName -> artist=${parseResult.artist}, title=${parseResult.title}")
+
+        _uiState.update {
+            it.copy(
+                showFileNameConfirmDialog = true,
+                parsedArtist = parseResult.artist,
+                parsedTitle = parseResult.title
+            )
+        }
+    }
+
+    /**
+     * Show or hide the filename confirm dialog
+     */
+    fun setShowFileNameConfirmDialog(show: Boolean) {
+        _uiState.update { it.copy(showFileNameConfirmDialog = show) }
+    }
+
+    /**
+     * Fetch auto edit data from parsed filename (artist and title)
+     * @param artist The parsed artist name (can be empty/null)
+     * @param title The parsed title
+     */
+    fun fetchAutoEditFromFilename(artist: String?, title: String) {
+        backgroundScope.launch {
+            val queryArtist = if (artist.isNullOrBlank()) null else artist
+            Log.d("AutoEdit", "fetchAutoEditFromFilename: title=$title, artist=$queryArtist")
+            _uiState.update { it.copy(autoEditState = AutoEditState.Loading) }
+
+            val result = musicBrainzRepository.searchRecordings(
+                title = title,
+                artist = queryArtist
+            )
+
+            Log.d("AutoEdit", "Result type: ${result::class.simpleName}")
+
+            when (result) {
+                is MusicBrainzResult.Success -> {
+                    val recordings = result.data
+                    if (recordings.isEmpty()) {
+                        _uiState.update {
+                            it.copy(
+                                autoEditState = AutoEditState.NoResults,
+                                autoEditTrackItems = listOf(),
+                                showAutoEditDialog = true,
+                                showFileNameConfirmDialog = false
+                            )
+                        }
+                    } else {
+                        val trackItems = buildAutoEditTrackItemsFromRecordings(recordings, title)
+                        _uiState.update {
+                            it.copy(
+                                autoEditState = AutoEditState.Loading, // Keep loading state, we use custom items
+                                autoEditRecordingItems = trackItems,
+                                showAutoEditDialog = true,
+                                showFileNameConfirmDialog = false
+                            )
+                        }
+                    }
+                }
+                is MusicBrainzResult.Error -> {
+                    Log.e("AutoEdit", "Error: ${result.exception.message}", result.exception)
+                    _uiState.update {
+                        it.copy(
+                            autoEditState = AutoEditState.Error(result.exception.message ?: "Unknown error"),
+                            showAutoEditDialog = true,
+                            showFileNameConfirmDialog = false
+                        )
+                    }
+                }
+                is MusicBrainzResult.NoResults -> {
+                    _uiState.update {
+                        it.copy(
+                            autoEditState = AutoEditState.NoResults,
+                            autoEditTrackItems = listOf(),
+                            showAutoEditDialog = true,
+                            showFileNameConfirmDialog = false
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Apply the selected track from auto-edit results
+     * @param trackItem The AutoEditTrackItem containing release and track
+     */
+    fun applyAutoEditTrack(trackItem: AutoEditTrackItem) {
+        val fieldMap = MusicBrainzMapper.mapTrackToFieldStates(trackItem.release, trackItem.track)
+
+        _uiState.update { currentState ->
+            val updatedFieldStates = currentState.fieldStates.toMutableMap()
+            var updatedInvisibleTags = currentState.invisibleTags.toMutableSet()
+            var updatedDeletedFields = currentState.deletedFields.toMutableSet()
+
+            fieldMap.forEach { (field, value) ->
+                val existingField = currentState.fieldStates[field]
+                if (existingField != null) {
+                    updatedFieldStates[field] = existingField.copy(
+                        textState = TextFieldState(value)
+                    )
+                } else {
+                    updatedFieldStates[field] = EditorFieldState(
+                        textState = TextFieldState(value),
+                        enabledState = mutableStateOf(false)
+                    )
+                    updatedInvisibleTags.remove(field)
+                    updatedDeletedFields.remove(field)
+                }
+            }
+
+            currentState.copy(
+                fieldStates = updatedFieldStates,
+                invisibleTags = updatedInvisibleTags,
+                deletedFields = updatedDeletedFields
+            )
+        }
+
+        setChangesMade(true)
+        setShowAutoEditDialog(false)
+
+        // Fetch cover art
+        fetchAndApplyCoverArt(trackItem.release.coverArtUrl, trackItem.release.releaseGroupId)
+    }
+
+    /**
+     * Build a list of AutoEditTrackItems from releases, sorted by relevance to search title
+     * @param releases List of MusicBrainz releases
+     * @param searchTitle The title used for searching (for sorting relevance)
+     * @return Flattened list of all tracks from all releases, sorted by relevance
+     */
+    private fun buildAutoEditTrackItems(
+        releases: List<dev.secam.simpletag.data.musicbrainz.models.MusicBrainzRelease>,
+        searchTitle: String
+    ): List<AutoEditTrackItem> {
+        val allTracks = mutableListOf<AutoEditTrackItem>()
+
+        for (release in releases) {
+            for (track in release.tracks) {
+                allTracks.add(AutoEditTrackItem(release, track))
+            }
+        }
+
+        // Sort: exact title match first, then contains match, then rest
+        allTracks.sortWith { item1, item2 ->
+            val title1 = item1.track.title.lowercase()
+            val title2 = item2.track.title.lowercase()
+            val searchLower = searchTitle.lowercase()
+
+            val exact1 = title1 == searchLower
+            val exact2 = title2 == searchLower
+            val contains1 = title1.contains(searchLower)
+            val contains2 = title2.contains(searchLower)
+
+            when {
+                exact1 && !exact2 -> -1
+                !exact1 && exact2 -> 1
+                exact1 && exact2 -> 0
+                contains1 && !contains2 -> -1
+                !contains1 && contains2 -> 1
+                contains1 && contains2 -> 0
+                else -> 0
+            }
+        }
+
+        return allTracks
+    }
+
+    /**
+     * Build a list of AutoEditRecordingItem from recordings, sorted by relevance to search title
+     * @param recordings List of MusicBrainzRecording
+     * @param searchTitle The title used for searching (for sorting relevance)
+     * @return List of recording items sorted by relevance
+     */
+    private fun buildAutoEditTrackItemsFromRecordings(
+        recordings: List<MusicBrainzRecording>,
+        searchTitle: String
+    ): List<AutoEditRecordingItem> {
+        val recordingItems: MutableList<AutoEditRecordingItem> = recordings.map { recording ->
+            // Prefer the first release (usually the original)
+            val preferredRelease = recording.releases.firstOrNull()
+            AutoEditRecordingItem(recording, preferredRelease)
+        }.toMutableList()
+
+        // Sort: exact title match first, then contains match, then rest
+        recordingItems.sortWith { item1: AutoEditRecordingItem, item2: AutoEditRecordingItem ->
+            val title1 = item1.recording.title.lowercase()
+            val title2 = item2.recording.title.lowercase()
+            val searchLower = searchTitle.lowercase()
+
+            val exact1 = title1 == searchLower
+            val exact2 = title2 == searchLower
+            val contains1 = title1.contains(searchLower)
+            val contains2 = title2.contains(searchLower)
+
+            when {
+                exact1 && !exact2 -> -1
+                !exact1 && exact2 -> 1
+                exact1 && exact2 -> 0
+                contains1 && !contains2 -> -1
+                !contains1 && contains2 -> 1
+                contains1 && contains2 -> 0
+                else -> 0
+            }
+        }
+
+        return recordingItems
+    }
+
+    /**
+     * Apply the selected recording from auto-edit results
+     * @param recordingItem The AutoEditRecordingItem containing recording and optional release
+     */
+    fun applyAutoEditRecording(recordingItem: AutoEditRecordingItem) {
+        val recording = recordingItem.recording
+        val release = recordingItem.release
+
+        _uiState.update { currentState ->
+            val updatedFieldStates = currentState.fieldStates.toMutableMap()
+            var updatedInvisibleTags = currentState.invisibleTags.toMutableSet()
+            var updatedDeletedFields = currentState.deletedFields.toMutableSet()
+
+            // Set title from recording
+            val titleField = currentState.fieldStates[SimpleTagField.Title]
+            if (titleField != null) {
+                updatedFieldStates[SimpleTagField.Title] = titleField.copy(
+                    textState = TextFieldState(recording.title)
+                )
+            } else {
+                updatedFieldStates[SimpleTagField.Title] = EditorFieldState(
+                    textState = TextFieldState(recording.title),
+                    enabledState = mutableStateOf(false)
+                )
+                updatedInvisibleTags.remove(SimpleTagField.Title)
+                updatedDeletedFields.remove(SimpleTagField.Title)
+            }
+
+            // Set artist from recording
+            val artistField = currentState.fieldStates[SimpleTagField.Artist]
+            if (artistField != null) {
+                updatedFieldStates[SimpleTagField.Artist] = artistField.copy(
+                    textState = TextFieldState(recording.artist)
+                )
+            } else {
+                updatedFieldStates[SimpleTagField.Artist] = EditorFieldState(
+                    textState = TextFieldState(recording.artist),
+                    enabledState = mutableStateOf(false)
+                )
+                updatedInvisibleTags.remove(SimpleTagField.Artist)
+                updatedDeletedFields.remove(SimpleTagField.Artist)
+            }
+
+            // Set album from release if available
+            if (release != null) {
+                val albumField = currentState.fieldStates[SimpleTagField.Album]
+                if (albumField != null) {
+                    updatedFieldStates[SimpleTagField.Album] = albumField.copy(
+                        textState = TextFieldState(release.title)
+                    )
+                } else {
+                    updatedFieldStates[SimpleTagField.Album] = EditorFieldState(
+                        textState = TextFieldState(release.title),
+                        enabledState = mutableStateOf(false)
+                    )
+                    updatedInvisibleTags.remove(SimpleTagField.Album)
+                    updatedDeletedFields.remove(SimpleTagField.Album)
+                }
+
+                // Set year if available
+                if (release.date != null) {
+                    val year = release.date.substringBefore("-")
+                    val yearField = currentState.fieldStates[SimpleTagField.Year]
+                    if (yearField != null) {
+                        updatedFieldStates[SimpleTagField.Year] = yearField.copy(
+                            textState = TextFieldState(year)
+                        )
+                    } else {
+                        updatedFieldStates[SimpleTagField.Year] = EditorFieldState(
+                            textState = TextFieldState(year),
+                            enabledState = mutableStateOf(false)
+                        )
+                        updatedInvisibleTags.remove(SimpleTagField.Year)
+                        updatedDeletedFields.remove(SimpleTagField.Year)
+                    }
+                }
+            }
+
+            // Set MusicBrainz IDs
+            recording.artistId?.let { artistId ->
+                val artistIdField = currentState.fieldStates[SimpleTagField.MusicBrainzArtistId]
+                if (artistIdField != null) {
+                    updatedFieldStates[SimpleTagField.MusicBrainzArtistId] = artistIdField.copy(
+                        textState = TextFieldState(artistId)
+                    )
+                } else {
+                    updatedFieldStates[SimpleTagField.MusicBrainzArtistId] = EditorFieldState(
+                        textState = TextFieldState(artistId),
+                        enabledState = mutableStateOf(false)
+                    )
+                    updatedInvisibleTags.remove(SimpleTagField.MusicBrainzArtistId)
+                    updatedDeletedFields.remove(SimpleTagField.MusicBrainzArtistId)
+                }
+            }
+
+            currentState.copy(
+                fieldStates = updatedFieldStates,
+                invisibleTags = updatedInvisibleTags,
+                deletedFields = updatedDeletedFields
+            )
+        }
+
+        setChangesMade(true)
+        setShowAutoEditDialog(false)
+
+        // Fetch cover art from release if available
+        if (release != null) {
+            fetchAndApplyCoverArt(release.coverArtUrl, null)
         }
     }
 }
@@ -852,6 +1188,13 @@ data class EditorUiState(
     val autoEditResults: List<dev.secam.simpletag.data.musicbrainz.models.MusicBrainzRelease> = listOf(),
     val selectedAutoEditResult: dev.secam.simpletag.data.musicbrainz.models.MusicBrainzRelease? = null,
     val showAutoEditDialog: Boolean = false,
+
+    /*      Filename Auto Edit     */
+    val showFileNameConfirmDialog: Boolean = false,
+    val parsedArtist: String? = null,
+    val parsedTitle: String = "",
+    val autoEditTrackItems: List<AutoEditTrackItem> = listOf(),
+    val autoEditRecordingItems: List<AutoEditRecordingItem> = listOf(),
 )
 
 data class EditorFieldState(

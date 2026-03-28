@@ -4,6 +4,7 @@ import android.util.Log
 import dev.secam.simpletag.data.musicbrainz.models.MusicBrainzException
 import dev.secam.simpletag.data.musicbrainz.models.MusicBrainzRelease
 import dev.secam.simpletag.data.musicbrainz.models.MusicBrainzResult
+import dev.secam.simpletag.data.musicbrainz.models.MusicBrainzRecording
 import dev.secam.simpletag.data.musicbrainz.models.ErrorType
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -295,5 +296,159 @@ class MusicBrainzRepository(
 
     fun clearCache() {
         cache.evictAll()
+    }
+
+    /**
+     * Search for recordings (songs/tracks) matching the given criteria
+     * This is more appropriate for single song lookup than release search
+     */
+    suspend fun searchRecordings(
+        title: String,
+        artist: String? = null
+    ): MusicBrainzResult<List<MusicBrainzRecording>> {
+        val query = buildQueryString(title, artist, null, null)
+        val cacheKey = "recording:$query"
+
+        // Check cache first
+        cache.get(cacheKey)?.let {
+            @Suppress("UNCHECKED_CAST")
+            return MusicBrainzResult.Success(it as List<MusicBrainzRecording>)
+        }
+
+        // Enforce rate limiting
+        rateLimitMutex.withLock {
+            val now = System.currentTimeMillis()
+            val timeSinceLastRequest = now - lastRequestTime
+            if (timeSinceLastRequest < RATE_LIMIT_MS) {
+                kotlinx.coroutines.delay(RATE_LIMIT_MS - timeSinceLastRequest)
+            }
+            lastRequestTime = System.currentTimeMillis()
+        }
+
+        return try {
+            val response = apiService.searchRecordings(
+                query = query,
+                limit = 10,
+                format = "json"
+            )
+
+            val json = JSONObject(response.string())
+            val recordings = parseRecordingJsonResponse(json)
+
+            Log.d(TAG, "Recording Query: $query -> ${recordings.size} results")
+
+            if (recordings.isEmpty()) {
+                MusicBrainzResult.NoResults
+            } else {
+                @Suppress("UNCHECKED_CAST")
+                cache.put(cacheKey, recordings as List<MusicBrainzRelease>)
+                MusicBrainzResult.Success(recordings)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Recording search failed", e)
+            when {
+                e is java.net.SocketTimeoutException ||
+                e is java.net.UnknownHostException -> {
+                    MusicBrainzResult.Error(
+                        MusicBrainzException(ErrorType.NETWORK_ERROR, "Network error: ${e.message}", e)
+                    )
+                }
+                e is retrofit2.HttpException && e.code() == 503 -> {
+                    MusicBrainzResult.Error(
+                        MusicBrainzException(ErrorType.RATE_LIMIT, "Rate limit exceeded. Please wait.", e)
+                    )
+                }
+                e is retrofit2.HttpException && e.code() == 404 -> {
+                    MusicBrainzResult.NoResults
+                }
+                e is org.json.JSONException -> {
+                    MusicBrainzResult.Error(
+                        MusicBrainzException(ErrorType.PARSE_ERROR, "Failed to parse response", e)
+                    )
+                }
+                else -> {
+                    MusicBrainzResult.Error(
+                        MusicBrainzException(ErrorType.NETWORK_ERROR, "Error: ${e.message ?: "Unknown error"}", e)
+                    )
+                }
+            }
+        }
+    }
+
+    /**
+     * Parse MusicBrainz recording JSON response
+     */
+    private fun parseRecordingJsonResponse(json: JSONObject): List<MusicBrainzRecording> {
+        val recordings = mutableListOf<MusicBrainzRecording>()
+
+        if (!json.has("recordings")) return recordings
+
+        val recordingsArray = json.getJSONArray("recordings")
+
+        for (i in 0 until recordingsArray.length().coerceAtMost(10)) {
+            try {
+                val recordingObj = recordingsArray.getJSONObject(i)
+                val recording = parseRecording(recordingObj)
+                recordings.add(recording)
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to parse recording at index $i", e)
+            }
+        }
+
+        return recordings
+    }
+
+    private fun parseRecording(obj: JSONObject): MusicBrainzRecording {
+        val id = obj.getString("id")
+        val title = obj.optString("title", "")
+        val duration = obj.optInt("length", 0).takeIf { it > 0 }
+
+        // Parse artist from artist-credit
+        val artistCredit = obj.optJSONArray("artist-credit")
+        var artistName = ""
+        var artistId: String? = null
+        if (artistCredit != null && artistCredit.length() > 0) {
+            val firstCredit = artistCredit.getJSONObject(0)
+            artistName = firstCredit.optString("name", "")
+            val artistObj = firstCredit.optJSONObject("artist")
+            if (artistObj != null) {
+                artistId = artistObj.optString("id", null)
+            }
+        }
+
+        // Parse releases
+        val releases = mutableListOf<dev.secam.simpletag.data.musicbrainz.models.MusicBrainzRecordingRelease>()
+        val releasesArray = obj.optJSONArray("releases")
+        if (releasesArray != null) {
+            for (i in 0 until releasesArray.length().coerceAtMost(5)) {
+                try {
+                    val releaseObj = releasesArray.getJSONObject(i)
+                    val releaseId = releaseObj.getString("id")
+                    val releaseTitle = releaseObj.optString("title", "")
+                    val releaseDate = releaseObj.optString("date", null)
+                    val coverArtUrl = "https://coverartarchive.org/release/$releaseId/front"
+
+                    releases.add(
+                        dev.secam.simpletag.data.musicbrainz.models.MusicBrainzRecordingRelease(
+                            id = releaseId,
+                            title = releaseTitle,
+                            date = releaseDate,
+                            coverArtUrl = coverArtUrl
+                        )
+                    )
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to parse release at index $i", e)
+                }
+            }
+        }
+
+        return MusicBrainzRecording(
+            id = id,
+            title = title,
+            artist = artistName,
+            artistId = artistId,
+            duration = duration,
+            releases = releases
+        )
     }
 }

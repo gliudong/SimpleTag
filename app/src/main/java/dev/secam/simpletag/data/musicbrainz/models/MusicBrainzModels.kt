@@ -46,6 +46,29 @@ data class MusicBrainzArtist(
     val endDate: String? = null
 )
 
+/**
+ * Represents a release that contains a recording
+ */
+data class MusicBrainzRecordingRelease(
+    val id: String,
+    val title: String,
+    val date: String? = null,
+    val coverArtUrl: String? = null
+)
+
+/**
+ * Represents a MusicBrainz recording (song/track)
+ * Returned from the recording search API
+ */
+data class MusicBrainzRecording(
+    val id: String,
+    val title: String,
+    val artist: String,
+    val artistId: String? = null,
+    val duration: Int? = null, // In milliseconds
+    val releases: List<MusicBrainzRecordingRelease> = emptyList()
+)
+
 data class MusicBrainzSearchResponse(
     val releases: List<MusicBrainzRelease>,
     val count: Int,

@@ -2,6 +2,7 @@ package dev.secam.simpletag.data.musicbrainz
 
 import dev.secam.simpletag.data.enums.SimpleTagField
 import dev.secam.simpletag.data.musicbrainz.models.MusicBrainzRelease
+import dev.secam.simpletag.data.musicbrainz.models.MusicBrainzTrack
 
 /**
  * Maps MusicBrainz API responses to SimpleTagField format
@@ -45,6 +46,59 @@ object MusicBrainzMapper {
             fieldMap[SimpleTagField.Title] = release.title
             fieldMap[SimpleTagField.Artist] = release.artist
         }
+
+        // Metadata fields
+        release.country?.let { fieldMap[SimpleTagField.Country] = it }
+        release.label?.let { fieldMap[SimpleTagField.Label] = it }
+        release.catalogNumber?.let { fieldMap[SimpleTagField.CatalogNumber] = it }
+        release.barcode?.let { fieldMap[SimpleTagField.Barcode] = it }
+        release.asin?.let { fieldMap[SimpleTagField.ASIN] = it }
+        release.releaseStatus?.let { fieldMap[SimpleTagField.ReleaseStatus] = it }
+        release.releaseType?.let { fieldMap[SimpleTagField.ReleaseType] = it }
+
+        // MusicBrainz IDs
+        release.artistId?.let { fieldMap[SimpleTagField.MusicBrainzReleaseArtistId] = it }
+        fieldMap[SimpleTagField.MusicBrainzReleaseId] = release.id
+        release.releaseGroupId?.let { fieldMap[SimpleTagField.MusicBrainzReleaseGroupId] = it }
+
+        return fieldMap
+    }
+
+    /**
+     * Map a specific track from a MusicBrainz release to a map of SimpleTagField values
+     * @param release The MusicBrainz release containing the track
+     * @param track The specific track to map (overrides default first track behavior)
+     * @return Map of SimpleTagField to String values
+     */
+    fun mapTrackToFieldStates(release: MusicBrainzRelease, track: MusicBrainzTrack): Map<SimpleTagField, String> {
+        val fieldMap = mutableMapOf<SimpleTagField, String>()
+
+        // Release-level fields
+        fieldMap[SimpleTagField.Album] = release.title
+        fieldMap[SimpleTagField.AlbumArtist] = release.artist
+
+        // Year
+        release.year?.let { fieldMap[SimpleTagField.Year] = it }
+
+        // Track-level fields from the specified track
+        fieldMap[SimpleTagField.Title] = track.title
+        fieldMap[SimpleTagField.Track] = track.number.toString()
+
+        track.artist?.let { trackArtist ->
+            if (trackArtist.isNotBlank()) {
+                fieldMap[SimpleTagField.Artist] = trackArtist
+            }
+        } ?: run {
+            // No track artist: use release artist
+            fieldMap[SimpleTagField.Artist] = release.artist
+        }
+
+        track.artistId?.let { trackArtistId ->
+            fieldMap[SimpleTagField.MusicBrainzArtistId] = trackArtistId
+        }
+
+        // Set MusicBrainz Track ID
+        fieldMap[SimpleTagField.MusicBrainzTrackId] = track.id
 
         // Metadata fields
         release.country?.let { fieldMap[SimpleTagField.Country] = it }

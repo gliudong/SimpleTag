@@ -245,7 +245,9 @@
     <string name="auto_edit_timeout">Request timed out. Please try again.</string>
     <string name="auto_edit_rate_limit">Too many requests. Please wait a moment.</string>
     <string name="auto_edit_select_release">Select Matching Release</string>
+    <string name="auto_edit_select_track">Select Matching Track</string>
     <string name="auto_edit_apply">Apply Metadata</string>
+    <string name="auto_edit_search">Search</string>
     <string name="auto_edit_search_again">Search Again</string>
     <string name="auto_edit_custom_query">Custom Query</string>
 

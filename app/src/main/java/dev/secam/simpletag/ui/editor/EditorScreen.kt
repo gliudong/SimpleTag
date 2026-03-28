@@ -68,7 +68,10 @@ import dev.secam.simpletag.ui.components.SimpleTopBar
 import dev.secam.simpletag.ui.editor.dialogs.AddFieldDialog
 import dev.secam.simpletag.ui.editor.dialogs.AutoEditLoadingDialog
 import dev.secam.simpletag.ui.editor.dialogs.AutoEditPreviewDialog
+import dev.secam.simpletag.ui.editor.dialogs.AutoEditTrackSheet
+import dev.secam.simpletag.ui.editor.dialogs.AutoEditRecordingSheet
 import dev.secam.simpletag.ui.editor.dialogs.BackWarningDialog
+import dev.secam.simpletag.ui.editor.dialogs.FileNameConfirmDialog
 import dev.secam.simpletag.ui.editor.dialogs.HelpDialog
 import dev.secam.simpletag.ui.editor.dialogs.LogDialog
 import dev.secam.simpletag.ui.editor.dialogs.LyricsEditorSheet
@@ -129,6 +132,11 @@ fun EditorScreen(
     val autoEditResults = uiState.autoEditResults
     val selectedAutoEditResult = uiState.selectedAutoEditResult
     val showAutoEditDialog = uiState.showAutoEditDialog
+    val showFileNameConfirmDialog = uiState.showFileNameConfirmDialog
+    val parsedArtist = uiState.parsedArtist
+    val parsedTitle = uiState.parsedTitle
+    val autoEditTrackItems = uiState.autoEditTrackItems
+    val autoEditRecordingItems = uiState.autoEditRecordingItems
 
     // permission request (API30+)
     val onCancelText = stringResource(R.string.permission_denied)
@@ -241,24 +249,7 @@ fun EditorScreen(
                         }
                         // Auto Edit button
                         IconButton(
-                            onClick = {
-                                // Build query params from current tags
-                                val currentTitle = viewModel.uiState.value.fieldStates[SimpleTagField.Title]?.textState?.text?.toString() ?: ""
-                                val currentArtist = viewModel.uiState.value.fieldStates[SimpleTagField.Artist]?.textState?.text?.toString()
-                                val currentAlbum = viewModel.uiState.value.fieldStates[SimpleTagField.Album]?.textState?.text?.toString()
-                                val currentTrack = viewModel.uiState.value.fieldStates[SimpleTagField.Track]?.textState?.text?.toString()?.toIntOrNull()
-
-                                if (currentTitle.isNotBlank()) {
-                                    viewModel.fetchAutoEditData(
-                                        AutoEditQueryParams(
-                                            title = currentTitle,
-                                            artist = currentArtist?.ifBlank { null },
-                                            album = currentAlbum?.ifBlank { null },
-                                            track = currentTrack
-                                        )
-                                    )
-                                }
-                            }
+                            onClick = { viewModel.parseAndShowConfirmDialog(musicList[0].path) }
                         ) {
                             Icon(
                                 painter = painterResource(R.drawable.ic_auto_edit_24px),
@@ -310,23 +301,7 @@ fun EditorScreen(
                 ) {
                     // Auto Edit button
                     IconButton(
-                        onClick = {
-                            val currentTitle = viewModel.uiState.value.fieldStates[SimpleTagField.Title]?.textState?.text?.toString() ?: ""
-                            val currentArtist = viewModel.uiState.value.fieldStates[SimpleTagField.Artist]?.textState?.text?.toString()
-                            val currentAlbum = viewModel.uiState.value.fieldStates[SimpleTagField.Album]?.textState?.text?.toString()
-                            val currentTrack = viewModel.uiState.value.fieldStates[SimpleTagField.Track]?.textState?.text?.toString()?.toIntOrNull()
-
-                            if (currentTitle.isNotBlank()) {
-                                viewModel.fetchAutoEditData(
-                                    AutoEditQueryParams(
-                                        title = currentTitle,
-                                        artist = currentArtist?.ifBlank { null },
-                                        album = currentAlbum?.ifBlank { null },
-                                        track = currentTrack
-                                    )
-                                )
-                            }
-                        }
+                        onClick = { viewModel.parseAndShowConfirmDialog(musicList[0].path) }
                     ) {
                         Icon(
                             painter = painterResource(R.drawable.ic_auto_edit_24px),
@@ -451,108 +426,98 @@ fun EditorScreen(
         if(showSongSyncMissingDialog){
             SongSyncMissingDialog { viewModel.setShowSongSyncMissingDialog(false) }
         }
+        if(showFileNameConfirmDialog){
+            FileNameConfirmDialog(
+                artist = parsedArtist,
+                title = parsedTitle,
+                onDismiss = { viewModel.setShowFileNameConfirmDialog(false) },
+                onSearch = { artist, title -> viewModel.fetchAutoEditFromFilename(artist, title) }
+            )
+        }
 
         // Auto Edit dialogs
         if (showAutoEditDialog) {
-            when (autoEditState) {
-                is AutoEditState.Loading -> {
-                    AutoEditLoadingDialog(
-                        onDismiss = {
-                            viewModel.setShowAutoEditDialog(false)
-                            viewModel.resetAutoEditState()
-                        }
-                    )
-                }
-                is AutoEditState.Success -> {
-                    AutoEditPreviewDialog(
-                        releases = autoEditResults,
-                        selectedRelease = selectedAutoEditResult,
-                        onReleaseSelected = { release ->
-                            viewModel.selectAutoEditResult(release)
-                        },
-                        onApply = {
-                            selectedAutoEditResult?.let { release ->
-                                viewModel.applyAutoEditData(release)
-                                viewModel.fetchAndApplyCoverArt(release.coverArtUrl, release.releaseGroupId)
+            // Show RecordingSheet if we have recording items (from filename search)
+            if (autoEditRecordingItems.isNotEmpty()) {
+                AutoEditRecordingSheet(
+                    recordingItems = autoEditRecordingItems,
+                    onRecordingSelected = { recordingItem ->
+                        viewModel.applyAutoEditRecording(recordingItem)
+                    },
+                    onDismiss = {
+                        viewModel.setShowAutoEditDialog(false)
+                        viewModel.resetAutoEditState()
+                    }
+                )
+            } else {
+                // Original logic for release-based search
+                when (autoEditState) {
+                    is AutoEditState.Loading -> {
+                        AutoEditLoadingDialog(
+                            onDismiss = {
+                                viewModel.setShowAutoEditDialog(false)
+                                viewModel.resetAutoEditState()
                             }
-                        },
-                        onDismiss = {
-                            viewModel.setShowAutoEditDialog(false)
-                            viewModel.resetAutoEditState()
-                        },
-                        onSearchAgain = {
-                            viewModel.resetAutoEditState()
-                            // Re-fetch with current parameters
-                            val currentTitle = viewModel.uiState.value.fieldStates[SimpleTagField.Title]?.textState?.text?.toString() ?: ""
-                            val currentArtist = viewModel.uiState.value.fieldStates[SimpleTagField.Artist]?.textState?.text?.toString()
-                            val currentAlbum = viewModel.uiState.value.fieldStates[SimpleTagField.Album]?.textState?.text?.toString()
-                            val currentTrack = viewModel.uiState.value.fieldStates[SimpleTagField.Track]?.textState?.text?.toString()?.toIntOrNull()
-
-                            if (currentTitle.isNotBlank()) {
-                                viewModel.fetchAutoEditData(
-                                    AutoEditQueryParams(
-                                        title = currentTitle,
-                                        artist = currentArtist?.ifBlank { null },
-                                        album = currentAlbum?.ifBlank { null },
-                                        track = currentTrack
-                                    )
+                        )
+                    }
+                    is AutoEditState.Success -> {
+                        AutoEditTrackSheet(
+                            trackItems = autoEditTrackItems,
+                            onTrackSelected = { trackItem ->
+                                viewModel.applyAutoEditTrack(trackItem)
+                            },
+                            onDismiss = {
+                                viewModel.setShowAutoEditDialog(false)
+                                viewModel.resetAutoEditState()
+                            }
+                        )
+                    }
+                    is AutoEditState.Error -> {
+                        // Show error dialog
+                        dev.secam.simpletag.ui.components.SimpleDialog(
+                            title = "Error",
+                            onDismiss = {
+                                viewModel.setShowAutoEditDialog(false)
+                                viewModel.resetAutoEditState()
+                            }
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(16.dp)
+                            ) {
+                                Text(
+                                    text = when (autoEditState) {
+                                        is AutoEditState.Error -> (autoEditState as AutoEditState.Error).message
+                                        else -> "Error fetching metadata"
+                                    }
+                                )
+                                Spacer(modifier = Modifier.height(16.dp))
+                                dev.secam.simpletag.ui.components.SimpleDialogOptions(
+                                    option1 = stringResource(R.string.dialog_cancel),
+                                    option2 = stringResource(R.string.auto_edit_search_again),
+                                    action1 = {
+                                        viewModel.setShowAutoEditDialog(false)
+                                        viewModel.resetAutoEditState()
+                                    },
+                                    action2 = {
+                                        viewModel.setShowAutoEditDialog(false)
+                                        viewModel.setShowFileNameConfirmDialog(true)
+                                    }
                                 )
                             }
                         }
-                    )
-                }
-                is AutoEditState.Error -> {
-                    // Show error dialog
-                    dev.secam.simpletag.ui.components.SimpleDialog(
-                        title = "Error",
-                        onDismiss = {
-                            viewModel.setShowAutoEditDialog(false)
-                            viewModel.resetAutoEditState()
-                        }
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(16.dp)
-                        ) {
-                            Text(
-                                text = when (autoEditState) {
-                                    is AutoEditState.Error -> (autoEditState as AutoEditState.Error).message
-                                    else -> "Error fetching metadata"
-                                }
-                            )
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.End
-                            ) {
-                                TextButton(
-                                    onClick = {
-                                        viewModel.setShowAutoEditDialog(false)
-                                        viewModel.resetAutoEditState()
-                                    }
-                                ) {
-                                    Text("OK")
-                                }
-                            }
-                        }
                     }
+                    is AutoEditState.NoResults -> {
+                        AutoEditTrackSheet(
+                            trackItems = emptyList(),
+                            onTrackSelected = {},
+                            onDismiss = {
+                                viewModel.setShowAutoEditDialog(false)
+                                viewModel.resetAutoEditState()
+                            }
+                        )
+                    }
+                    else -> {}
                 }
-                is AutoEditState.NoResults -> {
-                    AutoEditPreviewDialog(
-                        releases = emptyList(),
-                        selectedRelease = null,
-                        onReleaseSelected = {},
-                        onApply = {},
-                        onDismiss = {
-                            viewModel.setShowAutoEditDialog(false)
-                            viewModel.resetAutoEditState()
-                        },
-                        onSearchAgain = {
-                            viewModel.setShowAutoEditDialog(false)
-                            viewModel.resetAutoEditState()
-                        }
-                    )
-                }
-                else -> {}
             }
         }
     }
