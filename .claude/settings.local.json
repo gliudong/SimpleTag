@@ -29,7 +29,8 @@
       "Bash(./gradlew clean:*)",
       "Bash(./gradlew assembleDebug --no-build-cache)",
       "Bash(brew:*)",
-      "Bash(export:*)"
+      "Bash(export:*)",
+      "Bash(grep:*)"
     ]
   }
 }
