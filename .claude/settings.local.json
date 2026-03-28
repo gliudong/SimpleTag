@@ -30,7 +30,9 @@
       "Bash(./gradlew assembleDebug --no-build-cache)",
       "Bash(brew:*)",
       "Bash(export:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(adb logcat:*)",
+      "Bash(./gradlew assembleDebug 2>&1 | tail -20 && ./gradlew installDebug 2>&1 | tail -5 && adb logcat -c && echo \"=== Installed with MediaStore refresh ===\")"
     ]
   }
 }

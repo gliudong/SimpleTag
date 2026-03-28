@@ -321,16 +321,27 @@ class BatchAutoEditViewModel @Inject constructor(
     ) {
         var successCount = 0
         var failedCount = 0
+        val filesToRefresh = mutableListOf<MusicData>()
 
         for (result in results) {
             if (result.status is BatchFileStatus.Success && result.appliedFields != null) {
                 try {
                     applyFieldsToFile(context, result.musicData, result.appliedFields)
+                    filesToRefresh.add(result.musicData)
                     successCount++
                 } catch (e: Exception) {
                     Log.e(TAG, "Failed to apply fields to ${result.musicData.getFileName()}", e)
                     failedCount++
                 }
+            }
+        }
+
+        // Refresh MediaStore to reflect changes
+        if (filesToRefresh.isNotEmpty()) {
+            try {
+                refreshMediaStore(filesToRefresh)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to refresh MediaStore", e)
             }
         }
 
@@ -345,10 +356,14 @@ class BatchAutoEditViewModel @Inject constructor(
         musicData: MusicData,
         fieldMap: Map<SimpleTagField, String>
     ) {
+        Log.d(TAG, "Applying fields to ${musicData.getFileName()}")
+        Log.d(TAG, "Field map: $fieldMap")
+
         val audioFile = simpleFileReader(musicData.path)
             ?: throw Exception("Could not read audio file")
 
         // Apply each field
+        var fieldsWritten = 0
         fieldMap.forEach { (field, value) ->
             if (value.isNotBlank()) {
                 val fieldKey = when (field) {
@@ -380,9 +395,15 @@ class BatchAutoEditViewModel @Inject constructor(
 
                 fieldKey?.let {
                     audioFile.tag.setField(it, value)
+                    fieldsWritten++
+                    Log.d(TAG, "Wrote field: $field = $value")
                 }
+            } else {
+                Log.d(TAG, "Skipping blank field: $field")
             }
         }
+
+        Log.d(TAG, "Wrote $fieldsWritten fields to ${musicData.getFileName()}")
 
         // Write the file
         when {
@@ -394,6 +415,8 @@ class BatchAutoEditViewModel @Inject constructor(
                 simpleFileWriter(audioFile)
             }
         }
+
+        Log.d(TAG, "File written successfully: ${musicData.getFileName()}")
 
         // Update MediaStore
         val resolver = context.contentResolver
@@ -408,5 +431,15 @@ class BatchAutoEditViewModel @Inject constructor(
             put(MediaStore.Audio.Media.YEAR, (fieldMap[SimpleTagField.Year] ?: "").toIntOrNull() ?: 0)
         }
         resolver.update(uri, values, null, null)
+
+        Log.d(TAG, "MediaStore updated: ${musicData.getFileName()}")
+    }
+
+    /**
+     * Refresh MediaStore to reflect changes
+     */
+    private suspend fun refreshMediaStore(files: List<MusicData>) {
+        mediaRepo.refreshMediaStore(files)
+        Log.d(TAG, "MediaStore refreshed for ${files.size} files")
     }
 }
