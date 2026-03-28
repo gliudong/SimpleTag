@@ -97,11 +97,27 @@ fun BatchAutoEditScreen(
             Log.d("BatchAutoEditScreen", "Permission request granted")
             coroutineScope.launch {
                 // Permission granted, proceed with applying results
-                if (uiState is BatchAutoEditState.Completed) {
-                    val completedState = uiState as BatchAutoEditState.Completed
+                // Check current state and get results to apply
+                val currentState = uiState
+                val resultsToApply = when (currentState) {
+                    is BatchAutoEditState.Reviewing -> {
+                        // In reviewing state, apply selected files
+                        currentState.results.filter { it.musicData.id in currentState.selectedIds }
+                    }
+                    is BatchAutoEditState.Completed -> {
+                        // In completed state, apply all successful results
+                        currentState.results.filter { it.status is BatchFileStatus.Success }
+                    }
+                    else -> {
+                        Log.e("BatchAutoEditScreen", "Unexpected state after permission granted: $currentState")
+                        emptyList()
+                    }
+                }
+
+                if (resultsToApply.isNotEmpty()) {
                     viewModel.applyBatchResults(
                         context = context,
-                        results = completedState.results
+                        results = resultsToApply
                     ) { success, failed ->
                         applyInProgress = false
                         launch {
@@ -123,6 +139,9 @@ fun BatchAutoEditScreen(
                             onNavigateBack()
                         }
                     }
+                } else {
+                    Log.e("BatchAutoEditScreen", "No results to apply!")
+                    applyInProgress = false
                 }
             }
         }
@@ -134,6 +153,14 @@ fun BatchAutoEditScreen(
         Log.d("BatchAutoEditScreen", "Build.VERSION.SDK_INT = ${Build.VERSION.SDK_INT}")
         Log.d("BatchAutoEditScreen", "activity = $activity")
         Log.d("BatchAutoEditScreen", "getPermissionResult = $getPermissionResult")
+
+        if (results.isEmpty()) {
+            Log.e("BatchAutoEditScreen", "No results to apply!")
+            coroutineScope.launch {
+                snackbarHostState.showSnackbar("No files selected")
+            }
+            return
+        }
 
         applyInProgress = true
 
@@ -212,21 +239,55 @@ fun BatchAutoEditScreen(
 
     // Show dialog based on state
     when (val state = uiState) {
-        is BatchAutoEditState.Processing, is BatchAutoEditState.Completed -> {
+        is BatchAutoEditState.Processing -> {
             BatchAutoEditDialog(
                 state = state,
                 onCancel = {
-                    when (state) {
-                        is BatchAutoEditState.Processing -> {
-                            showCancelConfirm = true
-                        }
-                        else -> {
-                            onNavigateBack()
-                        }
-                    }
+                    showCancelConfirm = true
+                }
+            )
+        }
+        is BatchAutoEditState.Reviewing -> {
+            Log.d("BatchAutoEditScreen", "Reviewing state: ${state.results.size} results, ${state.selectedIds.size} selected")
+            BatchReviewScreen(
+                results = state.results,
+                selectedIds = state.selectedIds,
+                onSelectionToggle = {
+                    Log.d("BatchAutoEditScreen", "Toggle selection for file: $it")
+                    viewModel.toggleSelection(it)
                 },
+                onSelectAll = {
+                    Log.d("BatchAutoEditScreen", "Select All clicked")
+                    viewModel.selectAll()
+                },
+                onDeselectAll = {
+                    Log.d("BatchAutoEditScreen", "Deselect All clicked")
+                    viewModel.deselectAll()
+                },
+                onApplySelected = {
+                    Log.d("BatchAutoEditScreen", "Apply Selected clicked")
+                    Log.d("BatchAutoEditScreen", "Selected IDs: ${state.selectedIds}")
+                    val selectedResults = state.results.filter { it.musicData.id in state.selectedIds }
+                    Log.d("BatchAutoEditScreen", "Selected results count: ${selectedResults.size}")
+                    doApply(selectedResults)
+                },
+                onApplyAll = {
+                    Log.d("BatchAutoEditScreen", "Apply All clicked")
+                    val successResults = state.results.filter { it.status is BatchFileStatus.Success }
+                    Log.d("BatchAutoEditScreen", "Success results count: ${successResults.size}")
+                    doApply(successResults)
+                },
+                onCancel = { onNavigateBack() },
+                onRetryFailed = { viewModel.retryFailed() }
+            )
+        }
+        is BatchAutoEditState.Completed -> {
+            // Legacy Completed state - show dialog
+            BatchAutoEditDialog(
+                state = state,
+                onCancel = { onNavigateBack() },
                 onApply = {
-                    if (state is BatchAutoEditState.Completed && !applyInProgress) {
+                    if (!applyInProgress) {
                         doApply(state.results)
                     }
                 }

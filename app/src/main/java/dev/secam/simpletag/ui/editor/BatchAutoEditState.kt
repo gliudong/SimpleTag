@@ -45,6 +45,18 @@ sealed class BatchFileStatus {
 }
 
 /**
+ * Current processing operation for progress display
+ */
+enum class ProcessingOperation {
+    /** Searching MusicBrainz for metadata */
+    Searching,
+    /** Applying metadata to files */
+    Applying,
+    /** Operation complete */
+    Done
+}
+
+/**
  * Overall state of the batch auto-edit operation
  */
 sealed class BatchAutoEditState {
@@ -55,7 +67,14 @@ sealed class BatchAutoEditState {
     data class Processing(
         val current: Int,
         val total: Int,
-        val currentFileName: String
+        val currentFileName: String,
+        val currentOperation: ProcessingOperation = ProcessingOperation.Searching
+    ) : BatchAutoEditState()
+
+    /** Reviewing search results before applying */
+    data class Reviewing(
+        val results: List<BatchFileResult>,
+        val selectedIds: Set<Long> = emptySet()
     ) : BatchAutoEditState()
 
     /** Processing completed with results */

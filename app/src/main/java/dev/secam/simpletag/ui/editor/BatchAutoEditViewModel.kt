@@ -87,12 +87,13 @@ class BatchAutoEditViewModel @Inject constructor(
                         break
                     }
 
-                    // Update progress before processing this file
+                    // Update progress - Searching phase
                     _uiState.update {
                         BatchAutoEditState.Processing(
                             current = index,
                             total = files.size,
-                            currentFileName = file.getFileName()
+                            currentFileName = file.getFileName(),
+                            currentOperation = ProcessingOperation.Searching
                         )
                     }
 
@@ -111,21 +112,15 @@ class BatchAutoEditViewModel @Inject constructor(
                         BatchAutoEditState.Processing(
                             current = index + 1,
                             total = files.size,
-                            currentFileName = file.getFileName()
+                            currentFileName = file.getFileName(),
+                            currentOperation = ProcessingOperation.Searching
                         )
                     }
                 }
 
-                // Finalize
+                // Finalize - transition to Reviewing state
                 if (_uiState.value !is BatchAutoEditState.Cancelled) {
-                    _uiState.update {
-                        BatchAutoEditState.Completed(
-                            results = results,
-                            successCount = successCount,
-                            failureCount = failureCount,
-                            skippedCount = skippedCount
-                        )
-                    }
+                    enterReviewState(results)
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Batch auto-edit failed", e)
@@ -309,6 +304,97 @@ class BatchAutoEditViewModel @Inject constructor(
     fun reset() {
         _uiState.update { BatchAutoEditState.Idle }
         currentJob = null
+    }
+
+    /**
+     * Enter review state with search results
+     * All successful results are pre-selected
+     */
+    fun enterReviewState(results: List<BatchFileResult>) {
+        val successIds = results
+            .filter { it.status is BatchFileStatus.Success }
+            .map { it.musicData.id }
+            .toSet()
+        Log.d(TAG, "enterReviewState: ${results.size} results, ${successIds.size} successful")
+        _uiState.update { BatchAutoEditState.Reviewing(results, successIds) }
+    }
+
+    /**
+     * Toggle selection state for a single file
+     */
+    fun toggleSelection(fileId: Long) {
+        val currentState = _uiState.value
+        if (currentState is BatchAutoEditState.Reviewing) {
+            val newSelected = if (currentState.selectedIds.contains(fileId)) {
+                currentState.selectedIds - fileId
+            } else {
+                currentState.selectedIds + fileId
+            }
+            Log.d(TAG, "toggleSelection: fileId=$fileId, newSelectedCount=${newSelected.size}")
+            _uiState.update { currentState.copy(selectedIds = newSelected) }
+        }
+    }
+
+    /**
+     * Select all successful files
+     */
+    fun selectAll() {
+        val currentState = _uiState.value
+        if (currentState is BatchAutoEditState.Reviewing) {
+            val successIds = currentState.results
+                .filter { it.status is BatchFileStatus.Success }
+                .map { it.musicData.id }
+                .toSet()
+            Log.d(TAG, "selectAll: selected ${successIds.size} files")
+            _uiState.update { currentState.copy(selectedIds = successIds) }
+        }
+    }
+
+    /**
+     * Deselect all files
+     */
+    fun deselectAll() {
+        val currentState = _uiState.value
+        if (currentState is BatchAutoEditState.Reviewing) {
+            Log.d(TAG, "deselectAll: cleared selection")
+            _uiState.update { currentState.copy(selectedIds = emptySet()) }
+        }
+    }
+
+    /**
+     * Retry failed files
+     * Re-processes only the files that failed previously
+     */
+    fun retryFailed() {
+        val currentState = _uiState.value
+        if (currentState is BatchAutoEditState.Reviewing) {
+            viewModelScope.launch {
+                val failedResults = currentState.results.filter { it.status is BatchFileStatus.Failed }
+
+                if (failedResults.isEmpty()) {
+                    return@launch
+                }
+
+                val newResults = currentState.results.toMutableList()
+
+                for (failed in failedResults) {
+                    // Re-process this file
+                    val newResult = processIndividualFile(failed.musicData)
+                    val index = newResults.indexOfFirst { it.musicData.id == failed.musicData.id }
+                    if (index != -1) {
+                        newResults[index] = newResult
+                    }
+                }
+
+                // Recalculate selected IDs (only successful files)
+                val successIds = newResults
+                    .filter { it.status is BatchFileStatus.Success }
+                    .map { it.musicData.id }
+                    .toSet()
+
+                _uiState.update { BatchAutoEditState.Reviewing(newResults, successIds) }
+            }
+        }
     }
 
     /**

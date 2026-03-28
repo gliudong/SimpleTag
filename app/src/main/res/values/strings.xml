@@ -263,5 +263,31 @@
     <string name="batch_auto_edit_cancel_confirm">Cancel batch auto-edit?</string>
     <string name="batch_auto_edit_cancel_message">Changes will not be saved.</string>
 
+    <!-- Batch Review Screen -->
+    <string name="batch_review_title">Review Changes</string>
+    <string name="batch_review_subtitle">%1$d of %2$d files selected</string>
+    <string name="batch_review_apply_selected">Apply Selected (%1$d)</string>
+    <string name="batch_review_apply_all">Apply All (%1$d)</string>
+    <string name="batch_review_select_all">Select All</string>
+    <string name="batch_review_deselect_all">Deselect All</string>
+    <string name="batch_review_failed_files">Failed Files (%1$d)</string>
+    <string name="batch_review_successful_files">Successfully Matched (%1$d)</string>
+    <string name="batch_review_view_details">View Details</string>
+    <string name="batch_review_retry_failed">Retry Failed</string>
+    <string name="batch_review_no_successful_files">No files to apply</string>
+
+    <!-- Batch Processing Operations -->
+    <string name="batch_operation_searching">Searching MusicBrainz…</string>
+    <string name="batch_operation_applying">Applying metadata…</string>
+    <string name="batch_operation_done">Complete</string>
+
+    <!-- Batch Error Dialog -->
+    <string name="batch_error_details_title">Error Details</string>
+    <string name="batch_error_failed_to_match">Failed to match file</string>
+    <string name="batch_error_occurred">An error occurred</string>
+    <string name="batch_error_copy">Copy Error</string>
+    <string name="batch_error_retry">Retry</string>
+    <string name="batch_error_partial_results">Partial Results</string>
+
 
 </resources>

@@ -24,8 +24,10 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -40,6 +42,7 @@ import androidx.compose.ui.window.DialogProperties
 import dev.secam.simpletag.R
 import dev.secam.simpletag.ui.editor.BatchAutoEditState
 import dev.secam.simpletag.ui.editor.BatchFileStatus
+import dev.secam.simpletag.ui.editor.ProcessingOperation
 
 /**
  * Dialog for batch auto-edit operations
@@ -49,7 +52,7 @@ import dev.secam.simpletag.ui.editor.BatchFileStatus
 fun BatchAutoEditDialog(
     state: BatchAutoEditState,
     onCancel: () -> Unit,
-    onApply: () -> Unit,
+    onApply: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     Dialog(
@@ -76,6 +79,7 @@ fun BatchAutoEditDialog(
                             current = state.current,
                             total = state.total,
                             currentFileName = state.currentFileName,
+                            currentOperation = state.currentOperation,
                             onCancel = onCancel
                         )
                     }
@@ -84,12 +88,12 @@ fun BatchAutoEditDialog(
                             successCount = state.successCount,
                             failureCount = state.failureCount,
                             skippedCount = state.skippedCount,
-                            onApply = onApply,
+                            onApply = onApply ?: {},
                             onCancel = onCancel
                         )
                     }
                     else -> {
-                        // Idle or Cancelled - don't show dialog
+                        // Idle, Reviewing, or Cancelled - don't show dialog
                     }
                 }
             }
@@ -102,6 +106,7 @@ private fun ProcessingContent(
     current: Int,
     total: Int,
     currentFileName: String,
+    currentOperation: ProcessingOperation = ProcessingOperation.Searching,
     onCancel: () -> Unit
 ) {
     Text(
@@ -117,6 +122,40 @@ private fun ProcessingContent(
     )
 
     Spacer(modifier = Modifier.height(16.dp))
+
+    // Current operation indicator
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center
+    ) {
+        val (operationText, showSpinner) = when (currentOperation) {
+            ProcessingOperation.Searching -> {
+                stringResource(R.string.batch_operation_searching) to true
+            }
+            ProcessingOperation.Applying -> {
+                stringResource(R.string.batch_operation_applying) to true
+            }
+            ProcessingOperation.Done -> {
+                stringResource(R.string.batch_operation_done) to false
+            }
+        }
+
+        if (showSpinner) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(16.dp),
+                strokeWidth = 2.dp
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+        }
+
+        Text(
+            text = operationText,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+
+    Spacer(modifier = Modifier.height(8.dp))
 
     Text(
         text = currentFileName,
