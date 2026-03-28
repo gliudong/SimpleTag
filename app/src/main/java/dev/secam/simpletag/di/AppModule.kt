@@ -27,6 +27,8 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import dev.secam.simpletag.data.media.MediaRepo
+import dev.secam.simpletag.data.musicbrainz.CoverArtArchiveApiService
+import dev.secam.simpletag.data.musicbrainz.CoverArtRepository
 import dev.secam.simpletag.data.musicbrainz.MusicBrainzApiService
 import dev.secam.simpletag.data.musicbrainz.MusicBrainzRepository
 import dev.secam.simpletag.data.preferences.PreferencesRepo
@@ -34,13 +36,23 @@ import dev.secam.simpletag.data.preferences.PreferencesRepoImpl
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
+import retrofit2.converter.moshi.MoshiConverterFactory
 import retrofit2.converter.scalars.ScalarsConverterFactory
 import java.util.concurrent.TimeUnit
+import javax.inject.Qualifier
 import javax.inject.Singleton
 
 val Context.dataStore: DataStore<Preferences> by preferencesDataStore(
     name = "dev.secam.checkin24.user_preferences"
 )
+
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+annotation class MusicBrainzRetrofit
+
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+annotation class CoverArtArchiveRetrofit
 
 @InstallIn(SingletonComponent::class)
 @Module
@@ -81,6 +93,7 @@ object AppModule {
 
     @Singleton
     @Provides
+    @MusicBrainzRetrofit
     fun provideRetrofit(okHttpClient: OkHttpClient): Retrofit {
         return Retrofit.Builder()
             .baseUrl("https://musicbrainz.org/ws/2/")
@@ -91,7 +104,7 @@ object AppModule {
 
     @Singleton
     @Provides
-    fun provideMusicBrainzApiService(retrofit: Retrofit): MusicBrainzApiService {
+    fun provideMusicBrainzApiService(@MusicBrainzRetrofit retrofit: Retrofit): MusicBrainzApiService {
         return retrofit.create(MusicBrainzApiService::class.java)
     }
 
@@ -99,5 +112,28 @@ object AppModule {
     @Provides
     fun provideMusicBrainzRepository(apiService: MusicBrainzApiService): MusicBrainzRepository {
         return MusicBrainzRepository(apiService)
+    }
+
+    @Singleton
+    @Provides
+    @CoverArtArchiveRetrofit
+    fun provideCoverArtArchiveRetrofit(okHttpClient: OkHttpClient): Retrofit {
+        return Retrofit.Builder()
+            .baseUrl("https://coverartarchive.org/")
+            .client(okHttpClient)
+            .addConverterFactory(MoshiConverterFactory.create())
+            .build()
+    }
+
+    @Singleton
+    @Provides
+    fun provideCoverArtArchiveApiService(@CoverArtArchiveRetrofit retrofit: Retrofit): CoverArtArchiveApiService {
+        return retrofit.create(CoverArtArchiveApiService::class.java)
+    }
+
+    @Singleton
+    @Provides
+    fun provideCoverArtRepository(apiService: CoverArtArchiveApiService): CoverArtRepository {
+        return CoverArtRepository(apiService)
     }
 }

@@ -93,6 +93,11 @@ dependencies {
     // retrofit & okhttp
     implementation(libs.retrofit.core)
     implementation(libs.retrofit.converter.scalars)
+    implementation(libs.retrofit.converter.moshi)
     implementation(libs.okhttp)
     implementation(libs.okhttp.logging.interceptor)
+
+    // moshi for JSON parsing
+    implementation(libs.moshi)
+    implementation(libs.moshi.kotlin)
 }

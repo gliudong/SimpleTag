@@ -41,8 +41,11 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.secam.simpletag.data.enums.SimpleTagField
 import dev.secam.simpletag.data.media.MediaRepo
 import dev.secam.simpletag.data.media.MusicData
+import dev.secam.simpletag.data.musicbrainz.CoverArtRepository
 import dev.secam.simpletag.data.musicbrainz.MusicBrainzMapper
 import dev.secam.simpletag.data.musicbrainz.MusicBrainzRepository
+import dev.secam.simpletag.data.musicbrainz.models.CoverArtInfo
+import dev.secam.simpletag.data.musicbrainz.models.CoverArtResult
 import dev.secam.simpletag.data.musicbrainz.models.MusicBrainzResult
 import dev.secam.simpletag.data.musicbrainz.models.MusicBrainzRecording
 import dev.secam.simpletag.data.preferences.PreferencesRepo
@@ -96,6 +99,7 @@ class EditorViewModel @Inject constructor(
     preferencesRepo: PreferencesRepo,
     private val mediaRepo: MediaRepo,
     private val musicBrainzRepository: MusicBrainzRepository,
+    private val coverArtRepository: CoverArtRepository,
     private val okHttpClient: OkHttpClient
 ): ViewModel() {
     private val _uiState = MutableStateFlow(EditorUiState())
@@ -739,14 +743,73 @@ class EditorViewModel @Inject constructor(
     private val _coverArtError = MutableStateFlow<String?>(null)
 
     /**
-     * Download cover art from URL and apply to editor.
-     * If release URL returns 404, notifies immediately and tries release-group URL in background.
+     * Download cover art from Cover Art Archive using intelligent quality selection.
+     * Uses release ID to fetch metadata and selects best quality (500px > 250px > original).
+     * Includes pre-check optimization and fallback to release group.
+     *
+     * @param releaseId MusicBrainz Release ID
+     * @param releaseGroupId MusicBrainz Release Group ID (for fallback)
+     * @param coverArtInfo Cover art availability info from MusicBrainz (for pre-check)
      */
-    fun fetchAndApplyCoverArt(coverArtUrl: String?, releaseGroupId: String? = null) {
-        if (coverArtUrl.isNullOrBlank()) {
-            Log.w("AutoEdit", "fetchAndApplyCoverArt: URL is null or blank, skipping")
+    fun fetchAndApplyCoverArt(
+        releaseId: String? = null,
+        releaseGroupId: String? = null,
+        coverArtInfo: CoverArtInfo? = null,
+        directUrl: String? = null  // Legacy support for direct URL
+    ) {
+        // Legacy support: if directUrl is provided and releaseId is not, use old method
+        if (!directUrl.isNullOrBlank() && releaseId.isNullOrBlank()) {
+            fetchAndApplyCoverArtLegacy(directUrl, releaseGroupId)
             return
         }
+
+        // New method: require releaseId
+        if (releaseId.isNullOrBlank()) {
+            Log.w("AutoEdit", "fetchAndApplyCoverArt: releaseId is null or blank, skipping")
+            return
+        }
+
+        backgroundScope.launch {
+            Log.d("AutoEdit", "Fetching cover art with quality selection for release=$releaseId")
+
+            when (val result = coverArtRepository.getReleaseCoverArtWithFallback(
+                releaseId = releaseId,
+                releaseGroupId = releaseGroupId,
+                coverArtInfo = coverArtInfo
+            )) {
+                is CoverArtResult.Success -> {
+                    Log.d("AutoEdit", "Cover art success: ${result.coverArt.url} (${result.coverArt.quality})")
+                    if (downloadAndApplyCoverArt(result.coverArt)) {
+                        _coverArtError.value = null
+                    } else {
+                        _coverArtError.value = "Failed to download cover art"
+                    }
+                }
+                is CoverArtResult.PartialSuccess -> {
+                    Log.d("AutoEdit", "Cover art partial success: ${result.coverArt.url} - ${result.fallbackMessage}")
+                    if (downloadAndApplyCoverArt(result.coverArt)) {
+                        _coverArtError.value = result.fallbackMessage
+                    } else {
+                        _coverArtError.value = "Failed to download cover art: ${result.fallbackMessage}"
+                    }
+                }
+                is CoverArtResult.NoCoverArt -> {
+                    Log.d("AutoEdit", "No cover art available")
+                    _coverArtError.value = "No cover art available"
+                }
+                is CoverArtResult.Error -> {
+                    Log.e("AutoEdit", "Cover art error: ${result.message}", result.cause)
+                    _coverArtError.value = "Failed: ${result.message}"
+                }
+            }
+        }
+    }
+
+    /**
+     * Legacy method for direct URL download (backward compatibility)
+     * @deprecated Use fetchAndApplyCoverArt with releaseId instead
+     */
+    private fun fetchAndApplyCoverArtLegacy(coverArtUrl: String, releaseGroupId: String? = null) {
         backgroundScope.launch {
             if (tryDownloadCoverArt(coverArtUrl)) return@launch
             // First URL failed, notify immediately
@@ -766,6 +829,13 @@ class EditorViewModel @Inject constructor(
     }
 
     val coverArtError = _coverArtError.asStateFlow()
+
+    /**
+     * Download cover art from a selected URL and apply to editor
+     */
+    private suspend fun downloadAndApplyCoverArt(coverArt: dev.secam.simpletag.data.musicbrainz.models.SelectedCoverArt): Boolean {
+        return tryDownloadCoverArt(coverArt.url)
+    }
 
     private fun tryDownloadCoverArt(url: String): Boolean {
         try {
@@ -957,8 +1027,12 @@ class EditorViewModel @Inject constructor(
         setChangesMade(true)
         setShowAutoEditDialog(false)
 
-        // Fetch cover art
-        fetchAndApplyCoverArt(trackItem.release.coverArtUrl, trackItem.release.releaseGroupId)
+        // Fetch cover art using new repository with quality selection
+        fetchAndApplyCoverArt(
+            releaseId = trackItem.release.id,
+            releaseGroupId = trackItem.release.releaseGroupId,
+            coverArtInfo = trackItem.release.coverArtInfo
+        )
     }
 
     /**
@@ -1150,9 +1224,12 @@ class EditorViewModel @Inject constructor(
         setChangesMade(true)
         setShowAutoEditDialog(false)
 
-        // Fetch cover art from release if available
+        // Fetch cover art from recording's release
+        // Note: MusicBrainzRecordingRelease has limited fields, use legacy method
         if (release != null) {
-            fetchAndApplyCoverArt(release.coverArtUrl, null)
+            fetchAndApplyCoverArt(
+                directUrl = release.coverArtUrl
+            )
         }
     }
 }

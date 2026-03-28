@@ -1,6 +1,7 @@
 package dev.secam.simpletag.data.musicbrainz
 
 import android.util.Log
+import dev.secam.simpletag.data.musicbrainz.models.CoverArtInfo
 import dev.secam.simpletag.data.musicbrainz.models.MusicBrainzException
 import dev.secam.simpletag.data.musicbrainz.models.MusicBrainzRelease
 import dev.secam.simpletag.data.musicbrainz.models.MusicBrainzResult
@@ -213,6 +214,20 @@ class MusicBrainzRepository(
             releaseGroupId = releaseGroup.optString("id", null)
         }
 
+        // Parse cover-art-archive for pre-check info
+        val coverArtArchive = obj.optJSONObject("cover-art-archive")
+        val coverArtInfo = if (coverArtArchive != null) {
+            CoverArtInfo(
+                front = coverArtArchive.optBoolean("front", false),
+                back = coverArtArchive.optBoolean("back", false),
+                count = coverArtArchive.optInt("count", 0),
+                artwork = coverArtArchive.optBoolean("artwork", false)
+            )
+        } else {
+            // For backward compatibility, default to trying to fetch
+            CoverArtInfo(front = true, back = false, count = 0, artwork = true)
+        }
+
         // Parse label-info-list for label name and catalog number
         val labelInfoList = obj.optJSONArray("label-info-list")
         var label: String? = null
@@ -276,7 +291,8 @@ class MusicBrainzRepository(
             asin = asin,
             releaseStatus = status,
             releaseType = releaseType,
-            releaseGroupId = releaseGroupId
+            releaseGroupId = releaseGroupId,
+            coverArtInfo = coverArtInfo
         )
     }
 

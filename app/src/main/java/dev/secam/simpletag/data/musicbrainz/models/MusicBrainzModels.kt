@@ -18,12 +18,13 @@ data class MusicBrainzRelease(
     val catalogNumber: String? = null,
     val trackCount: Int = 0,
     val tracks: List<MusicBrainzTrack> = emptyList(),
-    val coverArtUrl: String? = null, // Derived from MBID for Cover Art Archive
+    val coverArtUrl: String? = null, // Derived from MBID for Cover Art Archive (legacy)
     val barcode: String? = null,
     val asin: String? = null,
     val releaseStatus: String? = null,
     val releaseType: String? = null,
-    val releaseGroupId: String? = null
+    val releaseGroupId: String? = null,
+    val coverArtInfo: CoverArtInfo? = null // Cover art availability info for pre-check
 )
 
 data class MusicBrainzTrack(
