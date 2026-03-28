@@ -27,7 +27,9 @@
       "Bash(curl -s -H \"User-Agent: SimpleTag-Android/0.3.1 \\( https://github.com/test/SimpleTag \\)\" \"https://musicbrainz.org/ws/2/release/?query=Kai+Engel+Satin&fmt=json\")",
       "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); [print\\(f''''  - {r[\"\"title\"\"]} \\({r.get\\(\"\"date\"\",\"\"\"\"\\)}\\)''''\\) for r in d[''''releases''''][:5]]; print\\(f''''count={d[\"\"count\"\"]}''''\\)\")",
       "Bash(./gradlew clean:*)",
-      "Bash(./gradlew assembleDebug --no-build-cache)"
+      "Bash(./gradlew assembleDebug --no-build-cache)",
+      "Bash(brew:*)",
+      "Bash(export:*)"
     ]
   }
 }

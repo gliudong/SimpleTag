@@ -461,6 +461,7 @@ fun EditorScreen(
                         },
                         onApply = {
                             selectedAutoEditResult?.let { release ->
+                                android.util.Log.d("AutoEdit", "onApply: release=${release.title}, coverArtUrl=${release.coverArtUrl}")
                                 viewModel.applyAutoEditData(release)
                                 viewModel.fetchAndApplyCoverArt(release.coverArtUrl)
                             }

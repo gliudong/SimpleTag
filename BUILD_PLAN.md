@@ -90,7 +90,9 @@ drwxr-xr-x  ... ..
 # 设置 ANDROID_HOME 和 PATH
 echo 'export ANDROID_HOME=$HOME/Library/Android/sdk' >> ~/.zshrc
 echo 'export ANDROID_SDK_ROOT=$ANDROID_HOME' >> ~/.zshrc
-echo 'export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/build-tools/36.0.0' >> ~/.zshrc
+echo 'export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools' >> ~/.zshrc
+# build-tools 路径在安装后添加（版本号可能不同）
+echo 'export PATH=$PATH:$ANDROID_HOME/build-tools/$(ls $ANDROID_HOME/build-tools/ | tail -1)' >> ~/.zshrc
 
 # 重新加载 shell 配置
 source ~/.zshrc
@@ -101,7 +103,7 @@ echo $ANDROID_HOME
 
 **预期输出:**
 ```
-/Users/liudong320/Library/Android/sdk
+/Users/liudong/Library/Android/sdk
 ```
 
 #### 步骤 2.4: 使用 sdkmanager 安装必需组件
@@ -114,7 +116,11 @@ sdkmanager --licenses
 # 安装必需的 SDK 组件
 sdkmanager "platform-tools"
 sdkmanager "platforms;android-36"
-sdkmanager "build-tools;36.0.0"
+
+# 安装 build-tools（先查看可用版本，选择最新稳定版）
+sdkmanager --list 2>&1 | grep "build-tools;"
+# 如果 36.0.0 不可用，使用可用的最新版本，例如：
+sdkmanager "build-tools;36.0.0" || sdkmanager "build-tools;35.0.0"
 
 # 验证安装的组件
 sdkmanager --list_installed
@@ -123,7 +129,7 @@ sdkmanager --list_installed
 **预期看到已安装的组件:**
 ```
 Installed packages:
-  build-tools;36.0.0
+  build-tools;36.0.0 (或安装的实际版本)
   platform-tools
   platforms;android-36
 ```
@@ -138,7 +144,7 @@ sdkmanager --version
 adb version
 
 # 验证构建工具可用
-ls -la $ANDROID_HOME/build-tools/36.0.0/
+ls -la $ANDROID_HOME/build-tools/
 
 # 验证平台 SDK 可用
 ls -la $ANDROID_HOME/platforms/android-36/
@@ -158,7 +164,7 @@ ls -la $ANDROID_HOME/platforms/android-36/
 ### 3. 创建 local.properties
 
 ```bash
-cd /Users/liudong320/workspace/SimpleTag
+cd /Users/liudong/Documents/GitHub/SimpleTag
 
 # 创建 local.properties 文件并指定 SDK 路径
 echo "sdk.dir=$ANDROID_HOME" > local.properties
@@ -169,7 +175,7 @@ cat local.properties
 
 **预期输出:**
 ```
-sdk.dir=/Users/liudong320/Library/Android/sdk
+sdk.dir=/Users/liudong/Library/Android/sdk
 ```
 
 ---
@@ -210,7 +216,7 @@ sdk.dir=/Users/liudong320/Library/Android/sdk
 │   └── lib/
 ├── platform-tools/          # 平台工具（包含 adb）
 │   └── adb                  # Android Debug Bridge
-├── build-tools/36.0.0/      # 构建工具
+├── build-tools/36.0.0/    # 构建工具（版本号可能不同）
 │   ├── aapt                 # Android Asset Packaging Tool
 │   ├── aapt2                # AAPT2（新版）
 │   ├── zipalign             # ZIP 对齐工具
@@ -239,7 +245,7 @@ sdk.dir=/Users/liudong320/Library/Android/sdk
 
 - [ ] **Android SDK 命令行工具已安装**
   ```bash
-  echo $ANDROID_HOME  # 应显示: /Users/liudong320/Library/Android/sdk
+  echo $ANDROID_HOME  # 应显示: /Users/liudong/Library/Android/sdk
   sdkmanager --version  # 应显示版本号
   ```
 
@@ -250,7 +256,7 @@ sdk.dir=/Users/liudong320/Library/Android/sdk
 
 - [ ] **local.properties 文件已创建**
   ```bash
-  cat local.properties  # 应包含: sdk.dir=/Users/liudong320/Library/Android/sdk
+  cat local.properties  # 应包含: sdk.dir=/Users/liudong/Library/Android/sdk
   ```
 
 - [ ] **Gradle wrapper 可执行**
@@ -269,7 +275,7 @@ sdk.dir=/Users/liudong320/Library/Android/sdk
 ### 步骤 1: 清理之前的构建（可选）
 
 ```bash
-cd /Users/liudong320/workspace/SimpleTag
+cd /Users/liudong/Documents/GitHub/SimpleTag
 ./gradlew clean
 ```
 
@@ -397,7 +403,7 @@ export KEYSTORE_KEY_PASSWORD=your_key_password
 ### 步骤 3: 构建 Release APK
 
 ```bash
-cd /Users/liudong320/workspace/SimpleTag
+cd /Users/liudong/Documents/GitHub/SimpleTag
 
 # 构建 release APK
 ./gradlew assembleRelease
@@ -445,8 +451,8 @@ unzip -l app/build/outputs/apk/debug/SimpleTag_0.3.1-beta-debug.apk | head -20
 ### 2. 验证 APK 签名（仅 Release）
 
 ```bash
-# 使用 apksigner 验证
-$ANDROID_HOME/build-tools/36.0.0/apksigner verify \
+# 使用 apksigner 验证（$(ls $ANDROID_HOME/build-tools/ | tail -1) 自动获取最新版本）
+$ANDROID_HOME/build-tools/$(ls $ANDROID_HOME/build-tools/ | tail -1)/apksigner verify \
   --print-certs app/build/outputs/apk/release/SimpleTag_0.3.1-beta.apk
 ```
 
@@ -454,7 +460,7 @@ $ANDROID_HOME/build-tools/36.0.0/apksigner verify \
 
 ```bash
 # 使用 aapt 获取包信息
-$ANDROID_HOME/build-tools/36.0.0/aapt dump badging \
+$ANDROID_HOME/build-tools/$(ls $ANDROID_HOME/build-tools/ | tail -1)/aapt dump badging \
   app/build/outputs/apk/debug/SimpleTag_0.3.1-beta-debug.apk
 ```
 

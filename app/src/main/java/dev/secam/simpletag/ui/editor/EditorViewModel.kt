@@ -540,6 +540,7 @@ class EditorViewModel @Inject constructor(
 
     /*------- Setters -------*/
     fun setArtwork(artwork: Artwork?) {
+        Log.d("AutoEdit", "setArtwork: artwork=${if (artwork != null) "${artwork.binaryData?.size} bytes, mimeType=${artwork.mimeType}" else "null"}")
         _uiState.update { currentState ->
             currentState.copy(
                 artwork = artwork,
@@ -735,22 +736,40 @@ class EditorViewModel @Inject constructor(
      * Download cover art from URL and apply to editor
      */
     fun fetchAndApplyCoverArt(coverArtUrl: String?) {
-        if (coverArtUrl.isNullOrBlank()) return
+        if (coverArtUrl.isNullOrBlank()) {
+            Log.w("AutoEdit", "fetchAndApplyCoverArt: URL is null or blank, skipping")
+            return
+        }
+        Log.d("AutoEdit", "fetchAndApplyCoverArt: start downloading from $coverArtUrl")
         backgroundScope.launch {
             try {
                 val request = Request.Builder().url(coverArtUrl).build()
                 val response = okHttpClient.newCall(request).execute()
+                Log.d("AutoEdit", "fetchAndApplyCoverArt: response code=${response.code}, message=${response.message}")
                 if (response.isSuccessful) {
-                    val bytes = response.body?.bytes() ?: return@launch
+                    val body = response.body
+                    if (body == null) {
+                        Log.e("AutoEdit", "fetchAndApplyCoverArt: response body is null")
+                        return@launch
+                    }
+                    val bytes = body.bytes()
+                    Log.d("AutoEdit", "fetchAndApplyCoverArt: downloaded ${bytes.size} bytes, contentType=${body.contentType()}")
+                    if (bytes.isEmpty()) {
+                        Log.e("AutoEdit", "fetchAndApplyCoverArt: downloaded bytes are empty")
+                        return@launch
+                    }
                     val artwork = org.jaudiotagger.tag.images.AndroidArtwork()
                     artwork.binaryData = bytes
-                    artwork.mimeType = response.body?.contentType()?.toString() ?: "image/jpeg"
+                    artwork.mimeType = body.contentType()?.let { "${it.type}/${it.subtype}" } ?: "image/jpeg"
                     artwork.description = ""
                     artwork.pictureType = org.jaudiotagger.tag.reference.PictureTypes.DEFAULT_ID
                     setArtwork(artwork)
+                    Log.d("AutoEdit", "fetchAndApplyCoverArt: artwork set successfully, mimeType=${artwork.mimeType}")
+                } else {
+                    Log.w("AutoEdit", "fetchAndApplyCoverArt: HTTP ${response.code}, cover art not available")
                 }
             } catch (e: Exception) {
-                Log.e("AutoEdit", "Failed to fetch cover art", e)
+                Log.e("AutoEdit", "fetchAndApplyCoverArt: failed", e)
             }
         }
     }
