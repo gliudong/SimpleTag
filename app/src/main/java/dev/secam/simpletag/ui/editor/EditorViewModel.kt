@@ -67,7 +67,6 @@ import okhttp3.Request
 import java.util.ArrayList
 import javax.inject.Inject
 
-const val WRITE_TIMEOUT = 1000L
 val SUPPORTS_RG = listOf(
     "mp3",
     "wav",
@@ -280,12 +279,19 @@ class EditorViewModel @Inject constructor(
     fun clearCache(context: Context) {
         context.cacheDir.delete()
     }
+    private fun calculateTimeout(fileCount: Int): Long {
+        val baseTimeout = 5000L  // Base 5 seconds
+        val perFileTimeout = 500L  // 500ms per file
+        return baseTimeout + (fileCount * perFileTimeout)
+    }
+
     suspend fun writeTags(context: Context): Boolean {
         _uiState.update { it.copy(log = "") }
         backgroundScope.async {
             var log = ""
             try {
-                withTimeout(WRITE_TIMEOUT) {
+                val timeout = calculateTimeout(uiState.value.editorMusicList.size)
+                withTimeout(timeout) {
                     log = "Entered writeTags()\n"
                     val fields = uiState.value.fieldStates - uiState.value.deletedFields
                     val artwork = uiState.value.artwork
