@@ -67,6 +67,7 @@ fun SelectorScreen(
     viewModel: SelectorViewModel = hiltViewModel(),
     onNavigateToEditor: (List<MusicData>) -> Unit,
     onNavigateToSettings: () -> Unit,
+    onNavigateToBatchAutoEdit: (List<MusicData>) -> Unit = {}
 ) {
     val optionalPermissionsSkipped = viewModel.prefState.collectAsState().value.optionalPermissionsSkipped
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
@@ -111,7 +112,8 @@ fun SelectorScreen(
                         numSelected = selectedItems.size,
                         scrollBehavior = scrollBehavior,
                         onEdit = { onNavigateToEditor(selectedItems.toList()) },
-                        onBack = { viewModel.setMultiSelectedEnabled(false) }
+                        onBack = { viewModel.setMultiSelectedEnabled(false) },
+                        onBatchAutoEdit = { onNavigateToBatchAutoEdit(selectedItems.toList()) }
                     )
                 }
                 ListScreenTopBar(

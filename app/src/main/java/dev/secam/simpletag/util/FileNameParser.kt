@@ -91,4 +91,19 @@ object FileNameParser {
             title = nameWithoutExt.trim()
         )
     }
+
+    /**
+     * Extract track number from filename
+     * @param fileName The filename to parse
+     * @return Track number as Int, or null if not found
+     */
+    fun extractTrackNumber(fileName: String): Int? {
+        // Remove file extension if present
+        val nameWithoutExt = fileName.substringBeforeLast(".", "")
+
+        // Pattern: Track number at the start (e.g., "01. Artist - Title" or "01-Artist_Title")
+        val trackPattern = """^\s*(\d{1,3})\s*[.\-_]\s*""".toRegex()
+        val trackMatch = trackPattern.find(nameWithoutExt)
+        return trackMatch?.groupValues?.get(1)?.toIntOrNull()
+    }
 }

@@ -251,5 +251,17 @@
     <string name="auto_edit_search_again">Search Again</string>
     <string name="auto_edit_custom_query">Custom Query</string>
 
+    <!-- Batch Auto Edit -->
+    <string name="batch_auto_edit_title">Batch Auto Edit</string>
+    <string name="cd_batch_auto_edit">Auto edit selected files</string>
+    <string name="batch_auto_edit_processing">Processing %1$d of %2$d files…</string>
+    <string name="batch_auto_edit_complete">Batch Auto Edit Complete</string>
+    <string name="batch_auto_edit_success">Successfully matched</string>
+    <string name="batch_auto_edit_failed">Failed</string>
+    <string name="batch_auto_edit_skipped">Skipped</string>
+    <string name="batch_auto_edit_apply">Apply Changes</string>
+    <string name="batch_auto_edit_cancel_confirm">Cancel batch auto-edit?</string>
+    <string name="batch_auto_edit_cancel_message">Changes will not be saved.</string>
+
 
 </resources>

@@ -34,5 +34,9 @@ data class Editor(
     val musicList: String
 )
 
+@Serializable
+data class BatchAutoEdit(
+    val musicList: String
+)
 
 

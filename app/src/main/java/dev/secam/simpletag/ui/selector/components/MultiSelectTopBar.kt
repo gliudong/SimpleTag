@@ -36,7 +36,8 @@ fun MultiSelectTopBar(
     numSelected: Int,
     onEdit: () -> Unit,
     onBack: () -> Unit,
-    scrollBehavior: TopAppBarScrollBehavior
+    scrollBehavior: TopAppBarScrollBehavior,
+    onBatchAutoEdit: () -> Unit = {}
 ) {
     BackHandler {
         onBack()
@@ -54,6 +55,14 @@ fun MultiSelectTopBar(
             }
         },
         actions = {
+            IconButton(
+                onClick = onBatchAutoEdit
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_auto_edit_24px),
+                    contentDescription = stringResource(R.string.cd_batch_auto_edit)
+                )
+            }
             IconButton(
                 onClick = {
                     onEdit()
