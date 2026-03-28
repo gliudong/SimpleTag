@@ -19,11 +19,11 @@ object MusicBrainzMapper {
     fun mapToFieldStates(release: MusicBrainzRelease): Map<SimpleTagField, String> {
         val fieldMap = mutableMapOf<SimpleTagField, String>()
 
-        // Release-level fields
+        // Release-level fields (always set, even if empty)
         fieldMap[SimpleTagField.Album] = release.title
         fieldMap[SimpleTagField.AlbumArtist] = release.artist
 
-        // Year
+        // Year (optional)
         release.year?.let { fieldMap[SimpleTagField.Year] = it }
 
         // Track-level fields override release-level
@@ -47,7 +47,12 @@ object MusicBrainzMapper {
             fieldMap[SimpleTagField.Artist] = release.artist
         }
 
-        // Metadata fields
+        // Ensure Artist is always set (even if empty)
+        if (!fieldMap.containsKey(SimpleTagField.Artist)) {
+            fieldMap[SimpleTagField.Artist] = ""
+        }
+
+        // Metadata fields (optional)
         release.country?.let { fieldMap[SimpleTagField.Country] = it }
         release.label?.let { fieldMap[SimpleTagField.Label] = it }
         release.catalogNumber?.let { fieldMap[SimpleTagField.CatalogNumber] = it }
@@ -73,25 +78,20 @@ object MusicBrainzMapper {
     fun mapTrackToFieldStates(release: MusicBrainzRelease, track: MusicBrainzTrack): Map<SimpleTagField, String> {
         val fieldMap = mutableMapOf<SimpleTagField, String>()
 
-        // Release-level fields
-        fieldMap[SimpleTagField.Album] = release.title
-        fieldMap[SimpleTagField.AlbumArtist] = release.artist
+        // Release-level fields (always set, even if empty)
+        fieldMap[SimpleTagField.Album] = release.title.ifEmpty { "" }
+        fieldMap[SimpleTagField.AlbumArtist] = release.artist.ifEmpty { "" }
 
-        // Year
+        // Year (optional)
         release.year?.let { fieldMap[SimpleTagField.Year] = it }
 
-        // Track-level fields from the specified track
-        fieldMap[SimpleTagField.Title] = track.title
+        // Track-level fields from the specified track (always set)
+        fieldMap[SimpleTagField.Title] = track.title.ifEmpty { "" }
         fieldMap[SimpleTagField.Track] = track.number.toString()
 
-        track.artist?.let { trackArtist ->
-            if (trackArtist.isNotBlank()) {
-                fieldMap[SimpleTagField.Artist] = trackArtist
-            }
-        } ?: run {
-            // No track artist: use release artist
-            fieldMap[SimpleTagField.Artist] = release.artist
-        }
+        // Artist: prefer track artist, fallback to release artist, then empty string
+        val artist = track.artist?.takeIf { it.isNotBlank() } ?: release.artist
+        fieldMap[SimpleTagField.Artist] = artist.ifEmpty { "" }
 
         track.artistId?.let { trackArtistId ->
             fieldMap[SimpleTagField.MusicBrainzArtistId] = trackArtistId
@@ -100,7 +100,7 @@ object MusicBrainzMapper {
         // Set MusicBrainz Track ID
         fieldMap[SimpleTagField.MusicBrainzTrackId] = track.id
 
-        // Metadata fields
+        // Metadata fields (optional)
         release.country?.let { fieldMap[SimpleTagField.Country] = it }
         release.label?.let { fieldMap[SimpleTagField.Label] = it }
         release.catalogNumber?.let { fieldMap[SimpleTagField.CatalogNumber] = it }
